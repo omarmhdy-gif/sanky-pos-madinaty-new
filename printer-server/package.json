@@ -1,0 +1,17 @@
+{
+  "name": "sanky-printer-server",
+  "version": "1.9.1",
+  "private": true,
+  "description": "Local Printer Server for Sanky POS — runs on a PC on the same Wi-Fi network as the till and the EPSON receipt printer. Relays print jobs from the POS (which runs on iPads/tablets and cannot open a raw connection to a printer itself) to the printer over a raw TCP socket.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "install-service": "node install-service.js",
+    "uninstall-service": "node uninstall-service.js"
+  },
+  "dependencies": {
+    "bonjour-service": "^1.4.2",
+    "node-windows": "^1.0.0-beta.8",
+    "selfsigned": "^2.4.1"
+  }
+}

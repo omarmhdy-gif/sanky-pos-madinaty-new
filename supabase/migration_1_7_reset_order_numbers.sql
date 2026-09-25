@@ -1,0 +1,22 @@
+-- ============================================================================
+-- Migration 1.7 — Production Reset: restart order/receipt numbering at 1
+-- ============================================================================
+-- orders.order_number is a `generated always as identity` column. Deleting
+-- rows (already done as part of the production reset) does NOT reset the
+-- underlying sequence's next value — the next order created would still
+-- continue from wherever the old sequence left off. This is DDL, which the
+-- app's anon-key client SDK cannot execute (only SELECT/INSERT/UPDATE/DELETE
+-- and RPC calls are reachable that way) — it must be run once, manually,
+-- here in the Supabase SQL Editor.
+--
+-- Safe to run any time after the orders table has been cleared; if new
+-- orders were already created before this runs, this will cause a duplicate
+-- order_number collision risk — run this BEFORE taking any new orders.
+--
+-- There is no separate "receipt number" or "shift number" sequence to reset:
+-- printed receipts already just display this same order_number, and the
+-- `shifts` table has no numeric/sequential column at all (only a UUID-style
+-- text id) — there is nothing to restart for shifts.
+-- ============================================================================
+
+alter table orders alter column order_number restart with 1;

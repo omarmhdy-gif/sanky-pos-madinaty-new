@@ -1,0 +1,195 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Moon, Sun, Languages, LogOut, Building2, Wallet, Repeat, Check } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useI18n, bilingual } from "@/lib/i18n";
+import { useTheme } from "@/hooks/useTheme";
+import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useCartStore } from "@/lib/store/useCartStore";
+import { useBranchStore } from "@/lib/store/useBranchStore";
+import { useDataStore } from "@/lib/store/useDataStore";
+import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
+import { Button } from "@/components/ui/button";
+import { ShiftDialog } from "@/components/shifts/ShiftDialog";
+import { cn } from "@/lib/utils";
+
+export function Topbar({ title }: { title: string }) {
+  const { t, locale, setLocale } = useI18n();
+  const { theme, toggleTheme } = useTheme();
+  const { currentUser, logout } = useAuthStore();
+  const clearCart = useCartStore((s) => s.clearCart);
+  const clearBranch = useBranchStore((s) => s.clearBranch);
+  const branches = useBranchStore((s) => s.branches);
+  const currentBranchId = useBranchStore((s) => s.currentBranchId);
+  const setBranch = useBranchStore((s) => s.setBranch);
+  const shifts = useDataStore((s) => s.shifts);
+  const openStartShift = useShiftUIStore((s) => s.openStartShift);
+  const router = useRouter();
+  const [now, setNow] = useState<Date | null>(null);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
+
+  const openShift =
+    currentUser?.role === "cashier"
+      ? shifts.find((s) => s.cashierId === currentUser.id && s.status === "open") ?? null
+      : null;
+
+  useEffect(() => {
+    setNow(new Date());
+    const id = setInterval(() => setNow(new Date()), 1000 * 30);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    clearCart();
+    router.replace("/login");
+  };
+
+  const handleSwitchBranch = () => {
+    logout();
+    clearCart();
+    clearBranch();
+    router.replace("/branch-select");
+  };
+
+  return (
+    <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card px-4 lg:px-6">
+      <div>
+        <h1 className="text-lg font-semibold leading-tight">{title}</h1>
+        {now && (
+          <p className="text-xs text-muted-foreground leading-tight">
+            {now.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
+              weekday: "long",
+              month: "short",
+              day: "numeric",
+            })}{" "}
+            ·{" "}
+            {now.toLocaleTimeString(locale === "ar" ? "ar-EG" : "en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        {openShift ? (
+          <button
+            onClick={() => setShiftDialogOpen(true)}
+            className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success"
+          >
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            {t.shifts.shiftOpen}
+          </button>
+        ) : (
+          currentUser?.role === "cashier" && (
+            <button
+              onClick={openStartShift}
+              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent"
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              {t.shifts.startShift}
+            </button>
+          )
+        )}
+        {/* Owner-only, instant branch switch — distinct from the "Switch
+            Branch" menu item below, which fully logs out and re-prompts for
+            a PIN. This one keeps the owner authenticated and just changes
+            currentBranchId; DataBootstrap reactively refetches all
+            branch-scoped data when it changes, so no other wiring is needed. */}
+        {currentUser?.role === "owner" && branches.length > 1 && (
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="ghost" size="icon" title={t.common.quickSwitchBranch}>
+                <Repeat className="h-4.5 w-4.5" />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="end"
+                sideOffset={8}
+                className="z-50 min-w-[200px] rounded-lg border border-border bg-popover p-1.5 shadow-md animate-fade-in"
+              >
+                <div className="px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
+                  {t.common.quickSwitchBranch}
+                </div>
+                {branches.map((b) => (
+                  <DropdownMenu.Item
+                    key={b.id}
+                    onClick={() => setBranch(b.id)}
+                    className="flex cursor-pointer items-center justify-between rounded-md px-2.5 py-2 text-sm outline-none hover:bg-accent"
+                  >
+                    {bilingual(b.name, locale)}
+                    {b.id === currentBranchId && <Check className="h-4 w-4 text-primary" />}
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setLocale(locale === "en" ? "ar" : "en")}
+          title="Language"
+        >
+          <Languages className="h-4.5 w-4.5" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={toggleTheme} title="Theme">
+          {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+        </Button>
+
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button className="flex items-center gap-2 rounded-lg ps-1 pe-2.5 py-1 hover:bg-accent transition-colors">
+              <div
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white",
+                  currentUser?.avatarColor ?? "bg-primary"
+                )}
+              >
+                {currentUser?.name.slice(0, 2).toUpperCase()}
+              </div>
+              <span className="hidden sm:block text-sm font-medium">{currentUser?.name}</span>
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={8}
+              className="z-50 min-w-[180px] rounded-lg border border-border bg-popover p-1.5 shadow-md animate-fade-in"
+            >
+              <div className="px-2.5 py-2 text-sm">
+                <p className="font-medium">{currentUser?.name}</p>
+                <p className="text-xs capitalize text-muted-foreground">
+                  {currentUser && t.settings.roles[currentUser.role]}
+                </p>
+              </div>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              {currentUser?.role === "owner" && (
+                <DropdownMenu.Item
+                  onClick={handleSwitchBranch}
+                  className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none hover:bg-accent"
+                >
+                  <Building2 className="h-4 w-4" />
+                  {t.common.switchBranch}
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Item
+                onClick={handleLogout}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm text-destructive outline-none hover:bg-destructive/10"
+              >
+                <LogOut className="h-4 w-4" />
+                {t.common.logout}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
+
+      <ShiftDialog shift={openShift} open={shiftDialogOpen} onOpenChange={setShiftDialogOpen} />
+    </header>
+  );
+}

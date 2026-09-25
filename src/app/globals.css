@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 30 40% 98%;
+    --foreground: 25 30% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 25 30% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 25 30% 12%;
+
+    --primary: 25 45% 28%;
+    --primary-foreground: 30 40% 98%;
+
+    --secondary: 30 25% 93%;
+    --secondary-foreground: 25 30% 15%;
+
+    --muted: 30 20% 94%;
+    --muted-foreground: 25 15% 40%;
+
+    --accent: 30 30% 90%;
+    --accent-foreground: 25 30% 15%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 32%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 30 20% 88%;
+    --input: 30 20% 88%;
+    --ring: 25 45% 28%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 25 25% 8%;
+    --foreground: 30 30% 95%;
+
+    --card: 25 22% 11%;
+    --card-foreground: 30 30% 95%;
+
+    --popover: 25 22% 11%;
+    --popover-foreground: 30 30% 95%;
+
+    --primary: 30 45% 62%;
+    --primary-foreground: 25 30% 10%;
+
+    --secondary: 25 18% 16%;
+    --secondary-foreground: 30 30% 95%;
+
+    --muted: 25 18% 15%;
+    --muted-foreground: 30 15% 65%;
+
+    --accent: 25 18% 18%;
+    --accent-foreground: 30 30% 95%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 50% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --border: 25 18% 20%;
+    --input: 25 18% 20%;
+    --ring: 30 45% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  /* Hard guarantee that the document itself never scrolls, on any browser.
+     This app is a fixed-height "app shell" (Square/Toast-style POS): every
+     page's own root container is responsible for its own internal
+     scrolling (see AppShell.tsx's <main overflow-y-auto>), never the
+     document. height:100% here (NOT 100vh/100dvh — see .h-app below) is
+     the one sizing method with zero browser-support caveats, so this
+     safety net can never itself be the thing that fails silently. */
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  html[dir="rtl"] body {
+    letter-spacing: 0;
+  }
+}
+
+@layer utilities {
+  /* Full-viewport height, with a real fallback for browsers that don't
+     support the `dvh` unit (Chrome added it in v108, Nov 2022 — some
+     managed/update-frozen ChromeOS devices are still on an older build).
+     An unsupported CSS value is invalid and gets silently dropped per-
+     declaration, NOT replaced with a fallback automatically — so this
+     relies on the classic two-declaration pattern: an older browser
+     ignores the invalid `100dvh` line entirely and keeps the `100vh`
+     line above it; a modern browser applies both in order and the later,
+     valid `100dvh` line wins the cascade. Without the first line, an
+     unsupported browser is left with NO height declaration at all, which
+     is exactly what caused the whole document (not just an inner panel)
+     to scroll on affected Chromebooks — every full-page container in this
+     app (AppShell, login, branch-select, etc.) must use this, never the
+     bare `h-dvh` Tailwind utility, for that reason. */
+  .h-app {
+    height: 100vh;
+    height: 100dvh;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+}
