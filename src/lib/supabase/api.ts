@@ -200,12 +200,46 @@ timed(
 
 // ---- storage ----------------------------------------------------------------
 
-export async function uploadImage(file: File, folder: "products" | "logos"): Promise<string> {
-  const ext = file.name.split(".").pop() || "jpg";
+export async function uploadImage(
+  file: File,
+  folder: "products" | "logos"
+): Promise<string> {
+  if (!file || file.size === 0) {
+    throw new Error("The selected image is empty.");
+  }
+
+  const ext =
+    file.name.split(".").pop()?.toLowerCase() ||
+    file.type.split("/").pop() ||
+    "jpg";
+
+  const contentType = file.type || "image/jpeg";
+
   const path = `${folder}/${genId(folder)}.${ext}`;
-  const { error } = await supabase.storage.from("media").upload(path, file, { upsert: true });
-  if (error) throw new Error(error.message);
-  return supabase.storage.from("media").getPublicUrl(path).data.publicUrl;
+
+  const arrayBuffer = await file.arrayBuffer();
+
+  const { error } = await supabase.storage
+    .from("media")
+    .upload(path, arrayBuffer, {
+      upsert: true,
+      contentType,
+      cacheControl: "3600",
+    });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage
+    .from("media")
+    .getPublicUrl(path);
+
+  if (!data.publicUrl) {
+    throw new Error("Could not create image URL.");
+  }
+
+  return data.publicUrl;
 }
 
 // ---- products -------------------------------------------------------------
