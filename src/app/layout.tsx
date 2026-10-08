@@ -9,6 +9,7 @@ import { SystemMonitor } from "@/components/layout/SystemMonitor";
 export const metadata: Metadata = {
   title: "Sanky POS — Coffee Shop Point of Sale",
   description: "Fast, beautiful, bilingual point of sale for coffee shops. Built by Sanky.",
+  icons: { icon: "/sanky-logo.jpg", shortcut: "/sanky-logo.jpg", apple: "/sanky-logo.jpg" },
 };
 
 export const viewport: Viewport = {

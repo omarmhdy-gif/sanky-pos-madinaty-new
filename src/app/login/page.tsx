@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Delete, Moon, Sun, Languages } from "lucide-react";
-import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useDataStore } from "@/lib/store/useDataStore";
+import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
-import { verifyStaffPin } from "@/lib/supabase/api";
+import { authenticateStaffPin } from "@/lib/supabase/api";
 import { canAccess, defaultRouteFor } from "@/lib/permissions";
 import { RETURN_PATH_KEY } from "@/components/auth/AuthGuard";
 import { useI18n } from "@/lib/i18n";
@@ -14,29 +15,23 @@ import { useTheme } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { ShopLogo } from "@/components/layout/ShopLogo";
-import type { StaffUser } from "@/lib/types";
 
 export default function LoginPage() {
   const router = useRouter();
-  const staff = useDataStore((s) => s.staff);
   const login = useAuthStore((s) => s.login);
+  const openStartShift = useShiftUIStore((s) => s.openStartShift);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const { t, locale, setLocale } = useI18n();
   const { theme, toggleTheme } = useTheme();
 
-  const [selected, setSelected] = useState<StaffUser | null>(null);
   const [pin, setPin] = useState("");
   const [shake, setShake] = useState(false);
   const [verifying, setVerifying] = useState(false);
-
-  const handleSelect = (user: StaffUser) => {
-    setSelected(user);
-    setPin("");
-  };
+  const [welcomeName, setWelcomeName] = useState("");
+  const loginAttemptInFlight = useRef(false);
 
   const handleDigit = (d: string) => {
-    if (!selected || verifying) return;
+    if (loginAttemptInFlight.current || welcomeName) return;
     const next = (pin + d).slice(0, 4);
     setPin(next);
     if (next.length === 4) {
@@ -45,12 +40,20 @@ export default function LoginPage() {
   };
 
   const attemptLogin = async (candidate: string) => {
-    if (!selected || !currentBranchId) return;
+    if (!currentBranchId || loginAttemptInFlight.current) return;
+    loginAttemptInFlight.current = true;
     setVerifying(true);
+    let authenticated = false;
     try {
-      const user = await verifyStaffPin(selected.id, candidate, currentBranchId);
+      const user = await authenticateStaffPin(candidate, currentBranchId);
       if (user) {
+        authenticated = true;
         login(user);
+        const hasOpenTill = useDataStore.getState().shifts.some(
+          (shift) => shift.cashierId === user.id && shift.status === "open"
+        );
+        if (!hasOpenTill) openStartShift(true);
+        setWelcomeName(user.name);
         let returnPath: string | null = null;
         try {
           returnPath = sessionStorage.getItem(RETURN_PATH_KEY);
@@ -63,14 +66,18 @@ export default function LoginPage() {
         // "no access" screen (with a Log out button) renders instead of
         // silently doing nothing.
         const fallback = defaultRouteFor(user) ?? "/dashboard";
-        router.replace(returnPath && canAccess(user, returnPath) ? returnPath : fallback);
+        const destination = returnPath && canAccess(user, returnPath) ? returnPath : fallback;
+        window.setTimeout(() => router.replace(destination), 900);
         return;
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Login failed", "error");
+      return;
     } finally {
       setVerifying(false);
+      if (!authenticated) loginAttemptInFlight.current = false;
     }
+    toast(locale === "ar" ? "الكود غير صحيح" : "Incorrect PIN", "error");
     setShake(true);
     setTimeout(() => {
       setShake(false);
@@ -79,16 +86,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex h-app w-full flex-col bg-gradient-to-br from-espresso-50 to-amber-50 dark:from-background dark:to-background">
-      <header className="flex items-center justify-between p-5">
-        <div className="flex items-center gap-2.5">
-          <ShopLogo className="h-10 w-10 rounded-xl" />
-          <div>
-            <p className="font-semibold leading-tight">{t.app.name}</p>
-            <p className="text-xs text-muted-foreground leading-tight">{t.app.tagline}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="relative isolate flex h-app w-full flex-col overflow-hidden bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-amber-100 via-orange-50 to-stone-100 dark:from-stone-900 dark:via-neutral-950 dark:to-amber-950">
+      <div aria-hidden="true" className="pointer-events-none absolute -left-24 top-20 h-72 w-72 rounded-full bg-amber-300/20 blur-3xl dark:bg-amber-500/10" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 -right-20 h-80 w-80 rounded-full bg-orange-300/25 blur-3xl dark:bg-orange-500/10" />
+      <header className="relative z-10 flex justify-end p-3 sm:p-4">
+        <div className="flex items-center gap-2 rounded-2xl border border-white/70 bg-white/65 p-1.5 shadow-sm backdrop-blur dark:border-white/10 dark:bg-black/25">
           <Button
             variant="outline"
             size="icon"
@@ -103,105 +105,52 @@ export default function LoginPage() {
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-6 pb-10">
-        <div className="mb-8 text-center animate-fade-in">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{t.login.title}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t.login.subtitle}</p>
-        </div>
-
-        {!selected ? (
-          <div className="grid w-full max-w-2xl grid-cols-2 gap-4 sm:grid-cols-4">
-            {staff
-              .filter((s) => s.isActive)
-              .map((user) => (
-                <button
-                  key={user.id}
-                  onClick={() => handleSelect(user)}
-                  className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95"
-                >
-                  <div
-                    className={cn(
-                      "flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold text-white",
-                      user.avatarColor
-                    )}
-                  >
-                    {user.name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-semibold">{user.name}</p>
-                    <p className="text-xs capitalize text-muted-foreground">
-                      {t.settings.roles[user.role]}
-                    </p>
-                  </div>
-                </button>
-              ))}
-          </div>
-        ) : (
-          <div className={cn("flex w-full max-w-xs flex-col items-center gap-6", shake && "animate-shake")}>
-            <div className="flex flex-col items-center gap-2">
-              <div
-                className={cn(
-                  "flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold text-white",
-                  selected.avatarColor
-                )}
-              >
-                {selected.name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)}
+      <main className="relative z-10 flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-4 py-0 sm:px-6 sm:py-0">
+        <section className="my-auto w-full max-w-lg rounded-[2rem] border border-white/80 bg-white/80 px-6 py-[clamp(0.6rem,1.8dvh,1.25rem)] shadow-[0_24px_80px_-28px_rgba(91,53,24,0.35)] backdrop-blur-xl dark:border-white/10 dark:bg-neutral-900/80 sm:px-10">
+          <div className="mb-[clamp(0.65rem,2.2dvh,1.25rem)] flex flex-col items-center text-center">
+            <p className="text-3xl font-extrabold tracking-tight text-espresso-900 dark:text-amber-50">{t.app.name}</p>
+            <p className="mt-1 text-sm text-muted-foreground max-[700px]:hidden">{t.app.tagline}</p>
+            <div className="mt-5 h-px w-16 bg-gradient-to-r from-transparent via-amber-700/50 to-transparent dark:via-amber-300/50" />
+            {welcomeName ? (
+              <div className="mt-5 animate-fade-in text-center" role="status" aria-live="polite">
+                <h1 className="text-2xl font-bold">{locale === "ar" ? `مرحبًا ${welcomeName}` : `Welcome, ${welcomeName}`}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{locale === "ar" ? "جاري الدخول..." : "Signing in..."}</p>
               </div>
-              <p className="font-semibold">{selected.name}</p>
-              <p className="text-xs text-muted-foreground">{t.login.enterPin}</p>
-            </div>
-
-            <div className="flex gap-3">
-              {[0, 1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "h-3.5 w-3.5 rounded-full border-2 transition-colors",
-                    pin.length > i ? "border-primary bg-primary" : "border-border"
-                  )}
-                />
-              ))}
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-                <button
-                  key={d}
-                  onClick={() => handleDigit(d)}
-                  className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-card text-xl font-semibold shadow-sm transition-transform active:scale-90"
-                >
-                  {d}
-                </button>
-              ))}
-              <button
-                onClick={() => setSelected(null)}
-                className="flex h-16 w-16 items-center justify-center rounded-2xl text-xs font-medium text-muted-foreground"
-              >
-                {t.common.back}
-              </button>
-              <button
-                onClick={() => handleDigit("0")}
-                className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-card text-xl font-semibold shadow-sm transition-transform active:scale-90"
-              >
-                0
-              </button>
-              <button
-                onClick={() => setPin((p) => p.slice(0, -1))}
-                className="flex h-16 w-16 items-center justify-center rounded-2xl text-muted-foreground"
-              >
-                <Delete className="h-5 w-5" />
-              </button>
-            </div>
+            ) : (
+              <div className="mt-5 text-center">
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{t.login.title}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{t.login.subtitle}</p>
+              </div>
+            )}
           </div>
-        )}
+
+          {!welcomeName && (
+            <div className={cn("flex flex-col items-center gap-4", shake && "animate-shake")}>
+              <div className="flex gap-3" aria-label={`${pin.length} of 4 digits entered`}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className={cn("h-3.5 w-3.5 rounded-full border-2 transition-all", pin.length > i ? "scale-110 border-amber-700 bg-amber-700 dark:border-amber-300 dark:bg-amber-300" : "border-stone-300 dark:border-stone-600")} />
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                  <button key={d} onClick={() => handleDigit(d)} disabled={verifying} className="flex h-[clamp(2.5rem,6.5dvh,3.5rem)] w-[clamp(3rem,8vw,4.5rem)] items-center justify-center rounded-2xl border border-amber-900/10 bg-amber-50/80 text-xl font-semibold text-espresso-900 shadow-sm transition-all hover:border-amber-700/30 hover:bg-amber-100 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-amber-50 dark:hover:bg-white/10">
+                    {d}
+                  </button>
+                ))}
+                <button disabled={verifying || pin.length === 0} onClick={() => setPin("")} className="flex h-[clamp(2.5rem,6.5dvh,3.5rem)] w-[clamp(3rem,8vw,4.5rem)] items-center justify-center rounded-2xl text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40">
+                  {locale === "ar" ? "مسح" : "Clear"}
+                </button>
+                <button disabled={verifying} onClick={() => handleDigit("0")} className="flex h-[clamp(2.5rem,6.5dvh,3.5rem)] w-[clamp(3rem,8vw,4.5rem)] items-center justify-center rounded-2xl border border-amber-900/10 bg-amber-50/80 text-xl font-semibold text-espresso-900 shadow-sm transition-all hover:border-amber-700/30 hover:bg-amber-100 active:scale-95 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-amber-50 dark:hover:bg-white/10">
+                  0
+                </button>
+                <button disabled={verifying || pin.length === 0} onClick={() => setPin((p) => p.slice(0, -1))} aria-label={locale === "ar" ? "حذف آخر رقم" : "Delete last digit"} className="flex h-[clamp(2.5rem,6.5dvh,3.5rem)] w-[clamp(3rem,8vw,4.5rem)] items-center justify-center rounded-2xl text-muted-foreground transition-colors hover:bg-muted disabled:opacity-40">
+                  <Delete className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

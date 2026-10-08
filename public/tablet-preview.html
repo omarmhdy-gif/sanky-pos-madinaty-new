@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sanky POS · iPad preview</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; margin: 0; }
+      body {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: #f1eee9;
+        color: #29231e;
+        font: 14px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      header {
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        min-height: 64px;
+        padding: 10px 18px;
+        background: #fff;
+        border-bottom: 1px solid #e5ddd3;
+        box-shadow: 0 2px 12px rgb(49 37 27 / 6%);
+      }
+      .title { min-width: 0; }
+      .title strong { display: block; font-size: 15px; }
+      .title span { color: #776d63; font-size: 12px; }
+      .controls { display: flex; align-items: center; gap: 8px; }
+      button {
+        padding: 8px 12px;
+        border: 1px solid #ded4c9;
+        border-radius: 10px;
+        background: #fff;
+        color: #4d4136;
+        font: inherit;
+        cursor: pointer;
+      }
+      button[aria-pressed="true"] { border-color: #70492e; background: #70492e; color: #fff; }
+      #dimensions { min-width: 104px; color: #776d63; text-align: right; font-size: 12px; }
+      main { flex: 1; min-height: 0; overflow: auto; padding: 20px; }
+      #stage { position: relative; min-height: 100%; }
+      #scaled { position: absolute; top: 0; left: 0; transform-origin: top left; }
+      #device {
+        padding: 16px;
+        border: 1px solid #393634;
+        border-radius: 48px;
+        background: #242321;
+        box-shadow: 0 20px 60px rgb(35 27 21 / 22%), 0 3px 8px rgb(35 27 21 / 15%);
+      }
+      iframe {
+        display: block;
+        border: 0;
+        border-radius: 32px;
+        background: #fff;
+      }
+      @media (max-width: 520px) {
+        header { min-height: 58px; padding: 8px 10px; }
+        .title span { display: none; }
+        .controls { gap: 5px; }
+        button { padding: 7px 9px; font-size: 12px; }
+        #dimensions { min-width: 78px; font-size: 11px; }
+        main { padding: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="title">
+        <strong>Sanky POS · tablet preview</strong>
+        <span>Local responsive preview — your app runs inside an iPad-sized viewport.</span>
+      </div>
+      <div class="controls" role="group" aria-label="iPad orientation">
+        <button id="portrait" type="button" aria-pressed="true">Portrait</button>
+        <button id="landscape" type="button" aria-pressed="false">Landscape</button>
+        <span id="dimensions">820 × 1180</span>
+      </div>
+    </header>
+    <main>
+      <div id="stage">
+        <div id="scaled">
+          <div id="device">
+            <iframe id="app" src="/dashboard/" title="Sanky POS on iPad"></iframe>
+          </div>
+        </div>
+      </div>
+    </main>
+    <script>
+      const dimensions = { portrait: [820, 1180], landscape: [1180, 820] };
+      const stage = document.querySelector("main");
+      const scaled = document.querySelector("#scaled");
+      const device = document.querySelector("#device");
+      const frame = document.querySelector("#app");
+      const label = document.querySelector("#dimensions");
+      let orientation = "portrait";
+
+      function fit() {
+        const [width, height] = dimensions[orientation];
+        const outerWidth = width + 32;
+        const outerHeight = height + 32;
+        const scale = Math.min((stage.clientWidth - 24) / outerWidth, (stage.clientHeight - 24) / outerHeight, 1);
+        const visualWidth = outerWidth * scale;
+        const visualHeight = outerHeight * scale;
+        scaled.style.width = `${outerWidth}px`;
+        scaled.style.height = `${outerHeight}px`;
+        scaled.style.transform = `translate(${(stage.clientWidth - visualWidth) / 2}px, ${(stage.clientHeight - visualHeight) / 2}px) scale(${scale})`;
+        device.style.width = `${outerWidth}px`;
+        device.style.height = `${outerHeight}px`;
+        frame.style.width = `${width}px`;
+        frame.style.height = `${height}px`;
+        label.textContent = `${width} × ${height}`;
+      }
+
+      function setOrientation(value) {
+        orientation = value;
+        document.querySelector("#portrait").setAttribute("aria-pressed", String(value === "portrait"));
+        document.querySelector("#landscape").setAttribute("aria-pressed", String(value === "landscape"));
+        fit();
+      }
+
+      document.querySelector("#portrait").addEventListener("click", () => setOrientation("portrait"));
+      document.querySelector("#landscape").addEventListener("click", () => setOrientation("landscape"));
+      new ResizeObserver(fit).observe(stage);
+      fit();
+    </script>
+  </body>
+</html>

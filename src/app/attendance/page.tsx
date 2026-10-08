@@ -9,6 +9,7 @@ import { verifyAttendancePin, getOpenAttendance } from "@/lib/supabase/api";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FIXED_SHIFT_WINDOWS, DEFAULT_SHIFT_TEMPLATES, selectableShiftKey, minutesPastOfficialTime } from "@/lib/attendance";
 import type { Attendance, AttendanceEmployee } from "@/lib/types";
 
@@ -18,6 +19,7 @@ import type { Attendance, AttendanceEmployee } from "@/lib/types";
 export default function AttendancePage() {
   const { t, locale } = useI18n();
   const attendanceEmployees = useDataStore((s) => s.attendanceEmployees);
+  const attendanceRecords = useDataStore((s) => s.attendance);
   const checkInAttendance = useDataStore((s) => s.checkInAttendance);
   const checkOutAttendance = useDataStore((s) => s.checkOutAttendance);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
@@ -115,7 +117,8 @@ export default function AttendancePage() {
 
   return (
     <AppShell title={t.attendance.title}>
-      <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-5 p-4 sm:p-6 pb-10">
+      <div className="mx-auto w-full max-w-5xl space-y-6 p-4 pb-10 sm:p-6">
+       <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-5">
         {!selected ? (
           activeEmployees.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted-foreground">{t.common.noResults}</p>
@@ -243,6 +246,57 @@ export default function AttendancePage() {
             })}
           </div>
         )}
+       </div>
+
+       <Card>
+         <CardHeader className="pb-3">
+           <CardTitle className="flex items-center justify-between gap-3 text-base">
+             <span>{t.attendance.records}</span>
+             <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">{attendanceRecords.length}</span>
+           </CardTitle>
+         </CardHeader>
+         <CardContent>
+           {attendanceRecords.length === 0 ? (
+             <p className="py-8 text-center text-sm text-muted-foreground">{t.common.noResults}</p>
+           ) : (
+             <div className="max-h-[480px] overflow-auto">
+               <table className="w-full min-w-[680px] text-sm">
+                 <thead className="sticky top-0 bg-card text-xs text-muted-foreground">
+                   <tr className="border-b border-border">
+                     <th className="p-3 text-start font-medium">{t.attendance.employee}</th>
+                     <th className="p-3 text-start font-medium">{t.attendance.checkInTime}</th>
+                     <th className="p-3 text-start font-medium">{t.attendance.checkOutTime}</th>
+                     <th className="p-3 text-start font-medium">{t.attendance.workedHours}</th>
+                     <th className="p-3 text-start font-medium">{t.attendance.status}</th>
+                   </tr>
+                 </thead>
+                 <tbody>
+                   {attendanceRecords.map((record) => {
+                     const checkIn = new Date(record.checkInAt);
+                     const checkOut = record.checkOutAt ? new Date(record.checkOutAt) : null;
+                     const minutes = record.workedMinutes ?? Math.max(0, Math.round(((checkOut?.getTime() ?? Date.now()) - checkIn.getTime()) / 60000));
+                     const duration = `${Math.floor(minutes / 60)} ${locale === "ar" ? "س" : "h"} ${minutes % 60} ${locale === "ar" ? "د" : "m"}`;
+                     const dateOptions: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" };
+                     return (
+                       <tr key={record.id} className="border-b border-border/60 last:border-0">
+                         <td className="p-3 font-medium">{record.employeeName}</td>
+                         <td className="p-3 text-muted-foreground">{checkIn.toLocaleString(locale === "ar" ? "ar-EG" : "en-US", dateOptions)}</td>
+                         <td className="p-3 text-muted-foreground">{checkOut ? checkOut.toLocaleString(locale === "ar" ? "ar-EG" : "en-US", dateOptions) : "—"}</td>
+                         <td className="p-3">{duration}</td>
+                         <td className="p-3">
+                           <span className={cn("rounded-full px-2 py-1 text-xs font-medium", checkOut ? "bg-muted text-muted-foreground" : "bg-success/10 text-success")}>
+                             {checkOut ? t.attendance.checkedOut : t.attendance.clockedIn}
+                           </span>
+                         </td>
+                       </tr>
+                     );
+                   })}
+                 </tbody>
+               </table>
+             </div>
+           )}
+         </CardContent>
+       </Card>
       </div>
     </AppShell>
   );

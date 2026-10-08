@@ -10,10 +10,9 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/ui/toast";
 
-// Voluntarily opened — via the Topbar's "Open Shift" button or by attempting
-// to charge an order with no shift open (see useShiftUIStore) — so it's
-// fully cancellable, unlike the old always-forced version.
-export function StartShiftDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+// When required at login, this dialog cannot be dismissed until a till is
+// opened. Manual prompts remain cancellable.
+export function StartShiftDialog({ open, required = false, onOpenChange }: { open: boolean; required?: boolean; onOpenChange: (v: boolean) => void }) {
   const { t } = useI18n();
   const startShift = useDataStore((s) => s.startShift);
   const [openingCash, setOpeningCash] = useState("");
@@ -33,13 +32,17 @@ export function StartShiftDialog({ open, onOpenChange }: { open: boolean; onOpen
     try {
       await startShift(parsed);
       onOpenChange(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to open till", "error");
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (nextOpen || !required) onOpenChange(nextOpen);
+    }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <ShopLogo className="mb-2 h-12 w-12 rounded-xl" />
@@ -62,9 +65,7 @@ export function StartShiftDialog({ open, onOpenChange }: { open: boolean; onOpen
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t.common.cancel}
-          </Button>
+          {!required && <Button variant="outline" onClick={() => onOpenChange(false)}>{t.common.cancel}</Button>}
           <Button className="flex-1" size="lg" disabled={submitting} onClick={handleStart}>
             {t.shifts.startShift}
           </Button>

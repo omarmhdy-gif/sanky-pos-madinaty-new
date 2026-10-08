@@ -25,8 +25,10 @@ export function HeldOrdersDialog({ open, onOpenChange }: { open: boolean; onOpen
       orderType: order.orderType,
       tableNumber: order.tableNumber,
       customerName: order.customerName,
+      customerId: order.customerId,
       discountPercent: order.discountPercent,
       discountFixedAmount: order.discountFixedAmount ?? 0,
+      promoCode: order.promoCode,
     });
     removeHeld(id);
     onOpenChange(false);

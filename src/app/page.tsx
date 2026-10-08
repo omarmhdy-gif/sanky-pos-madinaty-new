@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { defaultRouteFor } from "@/lib/permissions";
-import { ShopLogo } from "@/components/layout/ShopLogo";
 
 export default function RootPage() {
   const router = useRouter();
@@ -25,10 +24,7 @@ export default function RootPage() {
 
   return (
     <div className="flex h-app w-full items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-3 animate-fade-in">
-        <ShopLogo className="h-14 w-14 rounded-2xl" />
-        <p className="text-sm text-muted-foreground">Loading Sanky POS...</p>
-      </div>
+      <p className="animate-fade-in text-sm text-muted-foreground">Loading Sanky POS...</p>
     </div>
   );
 }

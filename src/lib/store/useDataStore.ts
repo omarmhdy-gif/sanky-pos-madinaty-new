@@ -13,6 +13,7 @@ import type {
   Shift,
   Attendance,
   AttendanceEmployee,
+  InventoryQualityCheck,
 } from "@/lib/types";
 import * as api from "@/lib/supabase/api";
 import { toast } from "@/components/ui/toast";
@@ -59,7 +60,8 @@ interface DataStore extends AppData {
 
   // Products
   addProduct: (p: Omit<Product, "id" | "sortOrder" | "branchId">) => Promise<void>;
-  updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
+  updateProduct: (id: string, patch: Partial<Product>) => Promise<boolean>;
+  updateProductRecipe: (id: string, recipe: Product["recipe"]) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   // Categories
   addCategory: (c: Omit<Category, "id" | "sortOrder" | "branchId">) => Promise<void>;
@@ -71,6 +73,7 @@ interface DataStore extends AppData {
   deleteInventoryItem: (id: string) => Promise<void>;
   receiveStock: (itemId: string, qty: number, unitCost: number, supplier?: string) => Promise<void>;
   adjustStock: (itemId: string, delta: number, reason: "waste" | "stock_count") => Promise<void>;
+  recordInventoryQualityCheck: (input: Omit<InventoryQualityCheck, "id" | "branchId" | "checkedAt">) => Promise<void>;
   deletePurchase: (purchaseId: string) => Promise<void>;
   // Shifts
   startShift: (openingCash: number) => Promise<void>;
@@ -146,6 +149,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   orders: [],
   expenses: [],
   inventoryItems: [],
+  inventoryQualityChecks: [],
   stockMovements: [],
   purchases: [],
   shifts: [],
@@ -181,9 +185,16 @@ export const useDataStore = create<DataStore>()((set, get) => ({
       const updated = await api.updateProduct(id, patch);
       set((state) => ({ products: state.products.map((p) => (p.id === id ? updated : p)) }));
       syncRecipeAcrossBranches(updated);
+      return true;
     } catch (err) {
       toast(errorMessage(err, "Failed to update product"), "error");
+      return false;
     }
+  },
+  updateProductRecipe: async (id, recipe) => {
+    const updated = await api.updateProduct(id, { recipe });
+    set((state) => ({ products: state.products.map((product) => (product.id === id ? updated : product)) }));
+    syncRecipeAcrossBranches(updated);
   },
   deleteProduct: async (id) => {
     try {
@@ -287,6 +298,10 @@ export const useDataStore = create<DataStore>()((set, get) => ({
       toast(errorMessage(err, "Failed to adjust stock"), "error");
     }
   },
+  recordInventoryQualityCheck: async (input) => {
+    const record = await api.createInventoryQualityCheck({ ...input, branchId: requireBranchId() });
+    set((state) => ({ inventoryQualityChecks: [record, ...state.inventoryQualityChecks] }));
+  },
   deletePurchase: async (purchaseId) => {
     try {
       await api.deletePurchase(purchaseId);
@@ -308,7 +323,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
       });
       set((state) => ({ shifts: [shift, ...state.shifts.filter((s) => s.id !== shift.id)] }));
     } catch (err) {
-      toast(errorMessage(err, "Failed to start shift"), "error");
+      throw new Error(errorMessage(err, "Failed to start shift"));
     }
   },
   closeShift: async (shiftId, actualCash) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sun, Moon, Download, Upload, FileSpreadsheet, Trash2 } from "lucide-react";
+import { Sun, Moon, Download, Upload, FileSpreadsheet, Trash2, Tag, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopLogo } from "@/components/layout/ShopLogo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +32,10 @@ import {
   uploadImage,
   fetchLoyaltySettings,
   updateLoyaltySettings,
+  fetchPromoCodes,
+  createPromoCode,
+  deletePromoCode,
+  searchCustomers,
 } from "@/lib/supabase/api";
 import { exportAllToCsv } from "@/lib/export";
 import { APP_VERSION, BUILD_LABEL } from "@/lib/version";
@@ -41,7 +45,7 @@ import {
   DEFAULT_EXTERNAL_PAYMENT_ICON,
   getExternalPaymentIcon,
 } from "@/lib/externalPayment";
-import type { LoyaltySettings, MultiPricingSettings } from "@/lib/types";
+import type { Customer, LoyaltySettings, MultiPricingSettings, PromoCode } from "@/lib/types";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 
@@ -95,6 +99,15 @@ export default function SettingsPage() {
     useState<LoyaltySettings>(DEFAULT_LOYALTY_SETTINGS);
   const [loyaltyLoading, setLoyaltyLoading] = useState(true);
   const [loyaltySaving, setLoyaltySaving] = useState(false);
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [promoName, setPromoName] = useState("");
+  const [promoPercent, setPromoPercent] = useState("10");
+  const [promoDays, setPromoDays] = useState("7");
+  const [promoCustomerQuery, setPromoCustomerQuery] = useState("");
+  const [promoCustomer, setPromoCustomer] = useState<Customer | null>(null);
+  const [promoCustomerResults, setPromoCustomerResults] = useState<Customer[]>([]);
+  const [promoCustomerSearching, setPromoCustomerSearching] = useState(false);
+  const [promoSaving, setPromoSaving] = useState(false);
 
   useEffect(() => {
     if (!currentBranchId) {
@@ -135,6 +148,55 @@ export default function SettingsPage() {
       cancelled = true;
     };
   }, [currentBranchId]);
+
+  useEffect(() => {
+    if (!currentBranchId) return;
+    fetchPromoCodes(currentBranchId).then(setPromoCodes).catch((err) => toast(err instanceof Error ? err.message : "Failed to load promo codes", "error"));
+  }, [currentBranchId]);
+
+  const handleCreatePromoCode = async () => {
+    if (!currentBranchId || !promoName.trim() || !promoCustomer) return;
+    const percent = Number(promoPercent);
+    const days = Number(promoDays);
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100 || !Number.isInteger(days) || days < 1) {
+      toast(isArabic ? "أدخل نسبة من 1 إلى 100 ومدة يومًا واحدًا على الأقل" : "Enter a percentage from 1 to 100 and a duration of at least 1 day", "error");
+      return;
+    }
+    setPromoSaving(true);
+    try {
+      const created = await createPromoCode({ branchId: currentBranchId, code: promoName, discountPercent: percent, durationDays: days, customerId: promoCustomer.id });
+      setPromoCodes((existing) => [{ ...created, customerName: promoCustomer.name, customerPhone: promoCustomer.phone }, ...existing]);
+      setPromoName("");
+      setPromoCustomer(null);
+      setPromoCustomerQuery("");
+      toast(isArabic ? "تم إنشاء البرومو كود" : "Promo code created", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not create promo code", "error");
+    } finally {
+      setPromoSaving(false);
+    }
+  };
+
+  const searchPromoCustomers = async () => {
+    if (!currentBranchId || !promoCustomerQuery.trim()) return;
+    setPromoCustomerSearching(true);
+    try {
+      setPromoCustomerResults(await searchCustomers(currentBranchId, promoCustomerQuery));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not search customers", "error");
+    } finally {
+      setPromoCustomerSearching(false);
+    }
+  };
+
+  const handleDeletePromoCode = async (id: string) => {
+    try {
+      await deletePromoCode(id);
+      setPromoCodes((existing) => existing.filter((promo) => promo.id !== id));
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not delete promo code", "error");
+    }
+  };
 
   const handleLoyaltyChange = <K extends keyof LoyaltySettings>(
     key: K,
@@ -368,6 +430,33 @@ export default function SettingsPage() {
                 />
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Promo codes */}
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><Tag className="h-5 w-5" />{isArabic ? "أكواد الخصم" : "Promo Codes"}</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">{isArabic ? "أنشئ كودًا مرتبطًا بعميل مسجل ونسبة خصم ومدة صلاحية. عند إدخال الكود في الـ POS سيُضاف العميل تلقائيًا للطلب." : "Create a code linked to a registered customer, with a discount and validity period. Entering it in the POS adds that customer to the order automatically."}</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.5fr_auto] lg:items-end">
+              <div><Label>{isArabic ? "اسم البرومو كود" : "Promo code"}</Label><Input className="mt-1" value={promoName} onChange={(e) => setPromoName(e.target.value.toUpperCase())} placeholder="WELCOME10" /></div>
+              <div><Label>{isArabic ? "نسبة الخصم %" : "Discount %"}</Label><Input className="mt-1" type="number" min="1" max="100" value={promoPercent} onChange={(e) => setPromoPercent(e.target.value)} /></div>
+              <div><Label>{isArabic ? "المدة بالأيام" : "Duration (days)"}</Label><Input className="mt-1" type="number" min="1" step="1" value={promoDays} onChange={(e) => setPromoDays(e.target.value)} /></div>
+              <div>
+                <Label>{isArabic ? "العميل المرتبط بالكود" : "Customer linked to code"}</Label>
+                {promoCustomer ? <div className="mt-1 flex h-10 items-center justify-between rounded-md border px-3 text-sm"><span>{promoCustomer.name} · {promoCustomer.phone}</span><Button variant="ghost" size="sm" onClick={() => { setPromoCustomer(null); setPromoCustomerQuery(""); }}>{isArabic ? "تغيير" : "Change"}</Button></div> : <div className="mt-1 flex gap-2"><Input value={promoCustomerQuery} onChange={(e) => { setPromoCustomerQuery(e.target.value); setPromoCustomerResults([]); }} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void searchPromoCustomers(); } }} placeholder={isArabic ? "ابحث بالاسم أو الهاتف" : "Search name or phone"} /><Button type="button" variant="outline" disabled={promoCustomerSearching || !promoCustomerQuery.trim()} onClick={searchPromoCustomers}><Search className="h-4 w-4" /><span className="sr-only">{isArabic ? "بحث" : "Search"}</span></Button></div>}
+                {!promoCustomer && promoCustomerResults.length > 0 && <div className="mt-1 max-h-36 overflow-auto rounded-md border">{promoCustomerResults.map((customer) => <button type="button" key={customer.id} onClick={() => { setPromoCustomer(customer); setPromoCustomerResults([]); setPromoCustomerQuery(customer.name); }} className="block w-full border-b px-3 py-2 text-start text-sm last:border-0 hover:bg-muted">{customer.name} · {customer.phone}</button>)}</div>}
+                {!promoCustomer && promoCustomerResults.length === 0 && promoCustomerQuery.trim() && <p className="mt-1 text-xs text-muted-foreground">{isArabic ? "ابحث واختر عميلًا مسجلًا" : "Search and select a registered customer"}</p>}
+              </div>
+              <Button disabled={promoSaving || !promoName.trim() || !promoCustomer || !currentBranchId} onClick={handleCreatePromoCode}><Plus className="me-1 h-4 w-4" />{isArabic ? "إنشاء" : "Create"}</Button>
+            </div>
+            {promoCodes.length > 0 ? <div className="divide-y rounded-lg border">{promoCodes.map((promo) => {
+              const expired = new Date(promo.expiresAt).getTime() <= Date.now();
+              return <div key={promo.id} className="flex items-center justify-between gap-3 p-3">
+                <div><p className="font-semibold">{promo.code} <span className="ms-2 text-sm text-primary">{promo.discountPercent}%</span></p><p className="text-xs text-muted-foreground">{expired ? (isArabic ? "منتهي" : "Expired") : (isArabic ? "ينتهي " : "Expires ") + new Date(promo.expiresAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-US")} · {promo.durationDays} {isArabic ? "يوم" : "days"} · {promo.customerName ?? (isArabic ? "الكود غير مربوط بعميل" : "No customer linked")}{promo.customerPhone ? ` · ${promo.customerPhone}` : ""}</p></div>
+                <Button variant="ghost" size="icon" aria-label={isArabic ? "حذف الكود" : "Delete code"} onClick={() => handleDeletePromoCode(promo.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+              </div>;
+            })}</div> : <p className="text-sm text-muted-foreground">{isArabic ? "لا توجد أكواد خصم حتى الآن" : "No promo codes created yet"}</p>}
           </CardContent>
         </Card>
 

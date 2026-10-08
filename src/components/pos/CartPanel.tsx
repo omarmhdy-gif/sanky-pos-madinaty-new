@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ShoppingBag, Minus, Plus, Trash2, X, Tag, PauseCircle, Repeat, UserRound, Phone, Search, Star } from "lucide-react";
 import { useCartStore, lineTotal, computeDiscountAmount } from "@/lib/store/useCartStore";
 import { useDataStore } from "@/lib/store/useDataStore";
@@ -10,7 +10,9 @@ import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
-import { createCustomer, searchCustomers, updateCustomer } from "@/lib/supabase/api";
+import { createCustomer, searchCustomers, updateCustomer, fetchCustomerById, fetchPromoCodes } from "@/lib/supabase/api";
+import type { PromoCode } from "@/lib/types";
+import { useBranchStore } from "@/lib/store/useBranchStore";
 
 export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const { t, locale } = useI18n();
@@ -25,10 +27,14 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
     setDiscountPercent,
     discountFixedAmount,
     setDiscountFixedAmount,
+    promoCode,
+    applyPromoCode,
     applySecondaryPricing,
     tableNumber,
     customerName,
     setCustomerName,
+    customerId,
+    setCustomerId,
   } = useCartStore();
   const settings = useDataStore((s) => s.settings);
   const products = useDataStore((s) => s.products);
@@ -39,6 +45,12 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
   const [fixedDiscountInput, setFixedDiscountInput] = useState("");
+  const [discountMode, setDiscountMode] = useState<"manual" | "promo">("manual");
+  const [promoInput, setPromoInput] = useState("");
+  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [promoError, setPromoError] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoApplying, setPromoApplying] = useState(false);
   const [showCustomerDialog, setShowCustomerDialog] = useState(false);
   const [customerInputName, setCustomerInputName] = useState(customerName ?? "");
   const [customerInputPhone, setCustomerInputPhone] = useState("");
@@ -47,7 +59,16 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const [customerSearching, setCustomerSearching] = useState(false);
   const [customerSaving, setCustomerSaving] = useState(false);
 
-  const branchId = (currentUser as any)?.branchId ?? "";
+  const branchId = useBranchStore((s) => s.currentBranchId) || (currentUser as any)?.branchId || "";
+
+  useEffect(() => {
+    if (!showDiscount || !branchId) return;
+    setPromoLoading(true);
+    fetchPromoCodes(branchId)
+      .then(setPromoCodes)
+      .catch((error) => setPromoError(error instanceof Error ? error.message : "Could not load promo codes"))
+      .finally(() => setPromoLoading(false));
+  }, [showDiscount, branchId]);
 
   const openCustomerDialog = () => {
     setCustomerInputName(customerName ?? "");
@@ -112,6 +133,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
           });
 
       setCustomerName(saved.name);
+      setCustomerId(saved.id);
       setCustomerInputName(saved.name);
       setCustomerInputPhone(saved.phone);
       setCustomerLoyaltyEnabled(saved.loyaltyEnabled);
@@ -144,8 +166,10 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
       orderType,
       tableNumber,
       customerName,
+      customerId,
       discountPercent,
       discountFixedAmount,
+      promoCode,
       cashierName: currentUser?.name ?? "Unknown",
     });
     clearCart();
@@ -168,9 +192,39 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
     setFixedDiscountInput("");
   };
 
+  const applyPromo = async () => {
+    const code = promoInput.trim().toUpperCase();
+    const match = promoCodes.find((p) => p.code.toUpperCase() === code && new Date(p.expiresAt).getTime() > Date.now());
+    if (!match) {
+      setPromoError(locale === "ar" ? "الكود غلط أو انتهت صلاحيته" : "Promo code is incorrect or expired");
+      return;
+    }
+    if (!match.customerId) {
+      setPromoError(locale === "ar" ? "الكود غير مرتبط بعميل. اربطه بعميل من الإعدادات أولاً." : "This code has no linked customer. Link it to a customer in Settings first.");
+      return;
+    }
+    setPromoApplying(true);
+    try {
+      const customer = await fetchCustomerById(match.customerId);
+      setCustomerId(customer.id);
+      setCustomerName(customer.name);
+      applyPromoCode(match.code, match.discountPercent);
+      setDiscountInput("");
+      setFixedDiscountInput("");
+      setPromoError("");
+      setShowDiscount(false);
+      toast(locale === "ar" ? `تم تطبيق الخصم وربط الطلب بالعميل ${customer.name}` : `Discount applied and linked to ${customer.name}`, "success");
+    } catch (error) {
+      setPromoError(error instanceof Error ? error.message : (locale === "ar" ? "تعذر تحميل العميل المرتبط بالكود" : "Could not load the customer linked to this code"));
+    } finally {
+      setPromoApplying(false);
+    }
+  };
+
   const removeDiscount = () => {
     setDiscountPercent(0);
     setDiscountFixedAmount(0);
+    applyPromoCode(undefined, 0);
     setShowDiscount(false);
     setDiscountInput("");
     setFixedDiscountInput("");
@@ -288,6 +342,8 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
               <Tag className="h-3.5 w-3.5" />
               {discountFixedAmount > 0
                 ? `${formatMoney(discountFixedAmount, settings.currencySymbol)} ${t.common.discount}`
+                : promoCode
+                ? `${promoCode} · ${discountPercent}%`
                 : discountPercent > 0
                 ? `${discountPercent}% ${t.common.discount}`
                 : t.pos.discountApply}
@@ -314,6 +370,11 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
             <span>{t.common.discount}{discountFixedAmount === 0 && discountPercent > 0 ? ` (${discountPercent}%)` : ""}</span>
             <span>-{formatMoney(discountAmount, settings.currencySymbol)}</span>
           </div>
+        )}
+        {promoCode && customerName && (
+          <p className="text-xs text-muted-foreground">
+            {locale === "ar" ? `البرومو كود مرتبط بالعميل: ${customerName}` : `Promo code customer: ${customerName}`}
+          </p>
         )}
         {settings.taxEnabled && (
           <div className="flex justify-between text-sm text-muted-foreground">
@@ -509,6 +570,21 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
             className="w-full max-w-xs rounded-xl bg-background p-5 shadow-xl animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => { setDiscountMode("manual"); setPromoError(""); }} className={cn("rounded-lg border px-3 py-2 text-sm font-medium", discountMode === "manual" ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{locale === "ar" ? "خصم عادي" : "Regular discount"}</button>
+              <button type="button" onClick={() => { setDiscountMode("promo"); setPromoError(""); }} className={cn("rounded-lg border px-3 py-2 text-sm font-medium", discountMode === "promo" ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{locale === "ar" ? "برومو كود" : "Promo code"}</button>
+            </div>
+            {discountMode === "promo" ? <>
+              <p className="mb-2 text-sm font-semibold">{locale === "ar" ? "أدخل برومو كود" : "Enter promo code"}</p>
+              <input value={promoInput} onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(""); }} placeholder={locale === "ar" ? "كود الخصم" : "Promo code"} className="mb-3 w-full rounded-lg border border-input bg-background px-3.5 py-2.5 text-center text-lg font-semibold uppercase focus:outline-none focus:ring-2 focus:ring-ring" />
+              {promoLoading && <p className="mb-2 text-xs text-muted-foreground">{locale === "ar" ? "جاري تحميل الأكواد..." : "Loading promo codes..."}</p>}
+              {customerName && <p className="mb-3 text-xs text-muted-foreground">{locale === "ar" ? `سيُربط الطلب تلقائيًا بالعميل: ${customerName}` : `This order will be linked to: ${customerName}`}</p>}
+              {promoError && <p className="mb-3 text-sm text-destructive">{promoError}</p>}
+              <div className="flex gap-2">
+                {promoCode && <Button variant="outline" className="flex-1" onClick={removeDiscount}>{locale === "ar" ? "إزالة الكود" : "Remove code"}</Button>}
+                <Button className="flex-1" disabled={!promoInput.trim() || promoLoading || promoApplying} onClick={applyPromo}>{promoApplying ? (locale === "ar" ? "جاري التطبيق..." : "Applying...") : (locale === "ar" ? "تطبيق الكود" : "Apply code")}</Button>
+              </div>
+            </> : <>
             <p className="mb-3 text-sm font-semibold">{t.pos.discountPercent}</p>
             <div className="mb-3 grid grid-cols-4 gap-2">
               {[5, 10, 15, 20].map((p) => (
@@ -571,6 +647,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
                 {t.pos.applyDiscount}
               </Button>
             </div>
+            </>}
           </div>
         </div>
       )}

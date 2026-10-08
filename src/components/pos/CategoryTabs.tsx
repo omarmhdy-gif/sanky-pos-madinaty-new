@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, PauseCircle, Star, History } from "lucide-react";
+import { Search, PauseCircle } from "lucide-react";
 import type { Category } from "@/lib/types";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ export function CategoryTabs({
   const heldCount = useHeldOrdersStore((s) => s.held.length);
 
   return (
-    <div className="flex flex-col gap-3 border-b border-border bg-card/50 p-3 sm:p-4 lg:gap-4 lg:p-5">
+    <div className="flex flex-col gap-2 border-b border-border bg-card/70 p-3 sm:px-4 sm:py-3 lg:gap-3 lg:px-5 lg:py-4">
       <div className="flex gap-2 lg:gap-3">
         <div className="relative flex-1">
           <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground lg:start-4 lg:h-5 lg:w-5" />
@@ -34,12 +34,12 @@ export function CategoryTabs({
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={t.pos.searchProducts}
-            className="ps-9 h-12 text-base lg:h-14 lg:ps-11 lg:text-base"
+            className="ps-9 h-11 text-sm lg:h-12 lg:ps-11 lg:text-base"
           />
         </div>
         <button
           onClick={onOpenHeld}
-          className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-border bg-card hover:bg-accent lg:h-14 lg:w-14 lg:rounded-xl"
+          className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/80 bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-accent/40 hover:shadow-md lg:h-12 lg:w-12"
           title={t.pos.heldOrders}
         >
           <PauseCircle className="h-5 w-5 text-muted-foreground lg:h-6 lg:w-6" />
@@ -50,51 +50,27 @@ export function CategoryTabs({
           )}
         </button>
       </div>
-      <div className="grid grid-flow-col grid-rows-2 auto-cols-max gap-2 lg:gap-3 overflow-x-auto no-scrollbar pb-0.5">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5 lg:gap-2.5">
         <button
           onClick={() => onSelect("all")}
           className={cn(
-            "shrink-0 rounded-full px-4.5 py-2.5 lg:px-7 lg:py-3.5 text-sm font-medium transition-colors border lg:text-base",
+            "shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-200 lg:px-5 lg:py-2.5 lg:text-sm",
             activeId === "all"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card text-muted-foreground border-border hover:bg-accent"
+              ? "border-primary bg-primary text-primary-foreground shadow-sm"
+              : "border-border/80 bg-card/80 text-muted-foreground hover:border-primary/20 hover:bg-accent/50 hover:text-accent-foreground"
           )}
         >
           {t.common.all}
-        </button>
-        <button
-          onClick={() => onSelect("favorites")}
-          className={cn(
-            "shrink-0 flex items-center gap-1.5 rounded-full px-4.5 py-2.5 lg:gap-2 lg:px-7 lg:py-3.5 text-sm font-medium transition-colors border lg:text-base",
-            activeId === "favorites"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card text-muted-foreground border-border hover:bg-accent"
-          )}
-        >
-          <Star className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5" />
-          {t.pos.favorites}
-        </button>
-        <button
-          onClick={() => onSelect("recent")}
-          className={cn(
-            "shrink-0 flex items-center gap-1.5 rounded-full px-4.5 py-2.5 lg:gap-2 lg:px-7 lg:py-3.5 text-sm font-medium transition-colors border lg:text-base",
-            activeId === "recent"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card text-muted-foreground border-border hover:bg-accent"
-          )}
-        >
-          <History className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5" />
-          {t.pos.recent}
         </button>
         {categories.map((c) => (
           <button
             key={c.id}
             onClick={() => onSelect(c.id)}
             className={cn(
-              "shrink-0 rounded-full px-4.5 py-2.5 lg:px-7 lg:py-3.5 text-sm font-medium transition-colors border lg:text-base",
+              "shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-200 lg:px-5 lg:py-2.5 lg:text-sm",
               activeId === c.id
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card text-muted-foreground border-border hover:bg-accent"
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border/80 bg-card/80 text-muted-foreground hover:border-primary/20 hover:bg-accent/50 hover:text-accent-foreground"
             )}
           >
             {bilingual(c.name, locale)}

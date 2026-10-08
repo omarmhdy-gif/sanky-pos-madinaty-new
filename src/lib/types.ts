@@ -149,6 +149,7 @@ export interface Order {
   subtotal: number;
   discountAmount: number;
   discountPercent?: number;
+  promoCode?: string;
   taxAmount: number;
   taxRate: number;
   total: number;
@@ -164,6 +165,19 @@ export interface Order {
   /** Mandatory when payment.method === "waste" — why this order's items were
    * discarded. Unused/undefined for every other payment method. */
   wasteReason?: string;
+}
+
+export interface PromoCode {
+  id: string;
+  branchId: string;
+  code: string;
+  discountPercent: number;
+  durationDays: number;
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  createdAt: string;
+  expiresAt: string;
 }
 
 export type ExpenseCategory =
@@ -244,6 +258,18 @@ export interface InventoryItem {
    * purchase/quantity is always just the final piece count, nothing about
    * packs is stored on the order/purchase itself. */
   packSize?: number;
+}
+
+export interface InventoryQualityCheck {
+  id: string;
+  branchId: string;
+  inventoryItemId: string;
+  inventoryItemName: { en: string; ar: string };
+  result: "good" | "needs_attention";
+  note?: string;
+  checkedById: string;
+  checkedByName: string;
+  checkedAt: string;
 }
 
 export interface Purchase {
@@ -389,8 +415,10 @@ export interface HeldOrder {
   orderType: OrderType;
   tableNumber?: string;
   customerName?: string;
+  customerId?: string;
   discountPercent: number;
   discountFixedAmount?: number;
+  promoCode?: string;
   cashierName: string;
   createdAt: string;
 }
@@ -405,6 +433,7 @@ export interface AppData {
   customers: Customer[];
   expenses: Expense[];
   inventoryItems: InventoryItem[];
+  inventoryQualityChecks: InventoryQualityCheck[];
   stockMovements: StockMovement[];
   purchases: Purchase[];
   shifts: Shift[];

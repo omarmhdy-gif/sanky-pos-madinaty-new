@@ -69,6 +69,7 @@ export function PaymentDialog({
 
   // Customer information is collected before payment for normal sales.
   const [checkoutStep, setCheckoutStep] = useState<"customer" | "payment">("customer");
+  const [skipCustomerAndLoyalty, setSkipCustomerAndLoyalty] = useState(false);
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerNameInput, setCustomerNameInput] = useState("");
   const [customerPhoneInput, setCustomerPhoneInput] = useState("");
@@ -82,6 +83,28 @@ export function PaymentDialog({
   const [loyaltyRedeemPoints, setLoyaltyRedeemPoints] = useState(0);
 
   const branchName = bilingual(branches.find((b) => b.id === currentBranchId)?.name ?? { en: "", ar: "" }, locale);
+
+  useEffect(() => {
+    if (!open || !cart.promoCode || !cart.customerId) return;
+    let cancelled = false;
+    setCustomerSaving(true);
+    refreshCustomerLoyalty(cart.customerId)
+      .then((customer) => {
+        if (cancelled) return;
+        setSelectedCustomer(customer);
+        setCustomerNameInput(customer.name);
+        setCustomerPhoneInput(customer.phone);
+        setLoyaltyEnabledInput(customer.loyaltyEnabled);
+        setSkipCustomerAndLoyalty(false);
+      })
+      .catch((err) => {
+        if (!cancelled) setCustomerError(err instanceof Error ? err.message : "Failed to load the promo customer");
+      })
+      .finally(() => {
+        if (!cancelled) setCustomerSaving(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, cart.promoCode, cart.customerId]);
 
   // Never lets a printer failure block or freeze checkout — the order is
   // already completed by the time this runs; printing is a best-effort
@@ -134,6 +157,7 @@ export function PaymentDialog({
     setCompletedOrder(null);
     setQueuedOffline(false);
     setCheckoutStep("customer");
+    setSkipCustomerAndLoyalty(false);
     setCustomerQuery("");
     setCustomerNameInput("");
     setCustomerPhoneInput("");
@@ -201,6 +225,19 @@ export function PaymentDialog({
   };
 
   const continueToPayment = async () => {
+    if (cart.promoCode && (!cart.customerId || selectedCustomer?.id !== cart.customerId)) {
+      setCustomerError(locale === "ar" ? "اختَر العميل المسجل المرتبط بكود الخصم للمتابعة." : "Select the registered customer linked to this promo code to continue.");
+      return;
+    }
+    if (skipCustomerAndLoyalty) {
+      setSelectedCustomer(null);
+      setCustomerNameInput("");
+      setCustomerPhoneInput("");
+      setLoyaltyRedeemPoints(0);
+      setCustomerError("");
+      setCheckoutStep("payment");
+      return;
+    }
     const name = customerNameInput.trim();
     const phone = customerPhoneInput.trim();
     if (!name || !phone) {
@@ -273,6 +310,11 @@ export function PaymentDialog({
     splitParts?: SplitPaymentPart[],
     wasteReasonText?: string
   ) => {
+    if (cart.promoCode && (!cart.customerId || selectedCustomer?.id !== cart.customerId)) {
+      setCheckoutStep("customer");
+      setCustomerError(locale === "ar" ? "لا يمكن استخدام البرومو كود بدون العميل المسجل المرتبط به." : "A promo code requires its registered customer.");
+      return;
+    }
     setSubmitting(true);
     const payload = {
       shiftId: openShift?.id,
@@ -280,6 +322,7 @@ export function PaymentDialog({
       subtotal,
       discountAmount: totalDiscountAmount,
       discountPercent: cart.discountPercent,
+      promoCode: cart.promoCode,
       taxAmount,
       taxRate: settings.taxEnabled ? settings.taxRate : 0,
       total,
@@ -362,7 +405,38 @@ export function PaymentDialog({
               Enter the customer name and phone number. Loyalty can be activated or deactivated for this customer.
             </div>
 
-            <div className="space-y-2">
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={skipCustomerAndLoyalty}
+              onClick={() => {
+                if (cart.promoCode) {
+                  setCustomerError(locale === "ar" ? "البرومو كود يتطلب عميلًا مسجلًا." : "A promo code requires a registered customer.");
+                  return;
+                }
+                const skip = !skipCustomerAndLoyalty;
+                setSkipCustomerAndLoyalty(skip);
+                setCustomerError("");
+                if (skip) {
+                  setSelectedCustomer(null);
+                  setCustomerNameInput("");
+                  setCustomerPhoneInput("");
+                  setCustomerQuery("");
+                  setCustomerSearchResults([]);
+                  setLoyaltyRedeemPoints(0);
+                }
+              }}
+              disabled={Boolean(cart.promoCode)}
+              className={cn("flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors", skipCustomerAndLoyalty ? "border-primary bg-primary/5" : "border-border bg-card", cart.promoCode && "cursor-not-allowed opacity-50")}
+            >
+              <span className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border text-xs", skipCustomerAndLoyalty ? "border-primary bg-primary text-primary-foreground" : "border-input")}>{skipCustomerAndLoyalty ? "✓" : ""}</span>
+              <span>
+                <span className="block font-semibold">Skip customer and loyalty for this order</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">Continue without customer details or loyalty points. This applies to this order only.</span>
+              </span>
+            </button>
+
+            {!skipCustomerAndLoyalty && <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground">Search existing customer</label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -383,9 +457,9 @@ export function PaymentDialog({
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {!skipCustomerAndLoyalty && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Customer name</label>
                 <div className="relative">
@@ -400,9 +474,9 @@ export function PaymentDialog({
                   <input type="tel" value={customerPhoneInput} onChange={(e) => { setCustomerPhoneInput(e.target.value); if (selectedCustomer) setSelectedCustomer(null); }} placeholder="Phone number" className="w-full rounded-lg border border-input bg-background py-2.5 pl-9 pr-3" />
                 </div>
               </div>
-            </div>
+            </div>}
 
-            <button type="button" onClick={() => setLoyaltyEnabledInput((v) => !v)} className={cn("flex w-full items-center justify-between rounded-xl border p-3 text-left transition-colors", loyaltyEnabledInput ? "border-primary bg-primary/5" : "border-border bg-card")}>
+            {!skipCustomerAndLoyalty && <button type="button" onClick={() => setLoyaltyEnabledInput((v) => !v)} className={cn("flex w-full items-center justify-between rounded-xl border p-3 text-left transition-colors", loyaltyEnabledInput ? "border-primary bg-primary/5" : "border-border bg-card")}>
               <div className="flex items-center gap-3">
                 <Gift className="h-5 w-5 text-primary" />
                 <div>
@@ -413,9 +487,9 @@ export function PaymentDialog({
               <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold", loyaltyEnabledInput ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
                 {loyaltyEnabledInput ? "ON" : "OFF"}
               </span>
-            </button>
+            </button>}
 
-            {selectedCustomer && (
+            {!skipCustomerAndLoyalty && selectedCustomer && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
                 <div className="flex justify-between"><span>Orders</span><span className="font-semibold">{selectedCustomer.totalOrders}</span></div>
                 <div className="flex justify-between"><span>Spent</span><span className="font-semibold">{formatMoney(selectedCustomer.totalSpent, settings.currencySymbol)}</span></div>

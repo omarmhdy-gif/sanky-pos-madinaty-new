@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Moon, Sun, Languages, LogOut, Building2, Wallet, Repeat, Check } from "lucide-react";
+import { Moon, Sun, Languages, LogOut, Building2, Wallet, Repeat, Check, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { useTheme } from "@/hooks/useTheme";
@@ -13,9 +13,10 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
 import { Button } from "@/components/ui/button";
 import { ShiftDialog } from "@/components/shifts/ShiftDialog";
+import { StaffAttendanceButton } from "@/components/attendance/StaffAttendanceButton";
 import { cn } from "@/lib/utils";
 
-export function Topbar({ title }: { title: string }) {
+export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: string; sidebarCollapsed: boolean; onToggleSidebar: () => void }) {
   const { t, locale, setLocale } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const { currentUser, logout } = useAuthStore();
@@ -29,11 +30,11 @@ export function Topbar({ title }: { title: string }) {
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
+  const [exitAfterShift, setExitAfterShift] = useState<"logout" | "branch" | null>(null);
 
-  const openShift =
-    currentUser?.role === "cashier"
-      ? shifts.find((s) => s.cashierId === currentUser.id && s.status === "open") ?? null
-      : null;
+  const openShift = currentUser
+    ? shifts.find((s) => s.cashierId === currentUser.id && s.status === "open") ?? null
+    : null;
 
   useEffect(() => {
     setNow(new Date());
@@ -42,12 +43,22 @@ export function Topbar({ title }: { title: string }) {
   }, []);
 
   const handleLogout = () => {
+    if (openShift) {
+      setExitAfterShift("logout");
+      setShiftDialogOpen(true);
+      return;
+    }
     logout();
     clearCart();
     router.replace("/login");
   };
 
   const handleSwitchBranch = () => {
+    if (openShift) {
+      setExitAfterShift("branch");
+      setShiftDialogOpen(true);
+      return;
+    }
     logout();
     clearCart();
     clearBranch();
@@ -55,11 +66,24 @@ export function Topbar({ title }: { title: string }) {
   };
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between border-b border-border bg-card px-4 lg:px-6">
-      <div>
-        <h1 className="text-lg font-semibold leading-tight">{title}</h1>
-        {now && (
-          <p className="text-xs text-muted-foreground leading-tight">
+    <header className="flex h-[4.5rem] shrink-0 items-center justify-between border-b border-border/80 bg-card/90 px-4 shadow-[0_1px_0_hsl(var(--foreground)/0.025)] backdrop-blur-xl lg:px-7">
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden shrink-0 md:inline-flex"
+          onClick={onToggleSidebar}
+          aria-label={sidebarCollapsed ? (locale === "ar" ? "إظهار القائمة الجانبية" : "Expand sidebar") : (locale === "ar" ? "تصغير القائمة الجانبية" : "Collapse sidebar")}
+          aria-expanded={!sidebarCollapsed}
+          aria-controls="app-sidebar"
+          title={sidebarCollapsed ? (locale === "ar" ? "إظهار القائمة الجانبية" : "Expand sidebar") : (locale === "ar" ? "تصغير القائمة الجانبية" : "Collapse sidebar")}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+        </Button>
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold leading-tight tracking-tight">{title}</h1>
+          {now && (
+            <p className="mt-0.5 text-[11px] text-muted-foreground leading-tight">
             {now.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
               weekday: "long",
               month: "short",
@@ -70,11 +94,13 @@ export function Topbar({ title }: { title: string }) {
               hour: "2-digit",
               minute: "2-digit",
             })}
-          </p>
-        )}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
+        <StaffAttendanceButton />
         {openShift ? (
           <button
             onClick={() => setShiftDialogOpen(true)}
@@ -84,9 +110,9 @@ export function Topbar({ title }: { title: string }) {
             {t.shifts.shiftOpen}
           </button>
         ) : (
-          currentUser?.role === "cashier" && (
+          currentUser && (
             <button
-              onClick={openStartShift}
+              onClick={() => openStartShift()}
               className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent"
             >
               <Wallet className="h-3.5 w-3.5" />
@@ -146,7 +172,7 @@ export function Topbar({ title }: { title: string }) {
             <button className="flex items-center gap-2 rounded-lg ps-1 pe-2.5 py-1 hover:bg-accent transition-colors">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white",
+                  "flex h-8 w-8 items-center justify-center rounded-xl text-xs font-bold text-white shadow-sm ring-2 ring-background",
                   currentUser?.avatarColor ?? "bg-primary"
                 )}
               >
@@ -189,7 +215,24 @@ export function Topbar({ title }: { title: string }) {
         </DropdownMenu.Root>
       </div>
 
-      <ShiftDialog shift={openShift} open={shiftDialogOpen} onOpenChange={setShiftDialogOpen} />
+      <ShiftDialog
+        shift={openShift}
+        open={shiftDialogOpen}
+        onOpenChange={setShiftDialogOpen}
+        onFinished={() => {
+          if (exitAfterShift === "logout") {
+            logout();
+            clearCart();
+            router.replace("/login");
+          } else if (exitAfterShift === "branch") {
+            logout();
+            clearCart();
+            clearBranch();
+            router.replace("/branch-select");
+          }
+          setExitAfterShift(null);
+        }}
+      />
     </header>
   );
 }

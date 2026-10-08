@@ -11,8 +11,10 @@ interface HeldOrdersStore {
     orderType: OrderType;
     tableNumber?: string;
     customerName?: string;
+    customerId?: string;
     discountPercent: number;
     discountFixedAmount?: number;
+    promoCode?: string;
     cashierName: string;
   }) => void;
   resumeOrder: (id: string) => HeldOrder | undefined;

@@ -3,6 +3,7 @@
 
 import { supabase } from "./client";
 import { genId } from "@/lib/utils";
+import { PDF_MENU } from "@/lib/pdfMenu";
 import type {
   AppData,
   Product,
@@ -18,12 +19,14 @@ import type {
   CartLine,
   Branch,
   InventoryItem,
+  InventoryQualityCheck,
   StockMovement,
   StockMovementReason,
   Purchase,
   Shift,
   Attendance,
   AttendanceEmployee,
+  PromoCode,
 } from "@/lib/types";
 import {
   fromBranchRow,
@@ -120,6 +123,7 @@ export async function fetchAll(branchId: string): Promise<AppData> {
     attendanceRes,
     attendanceEmployeesRes,
     customersRes,
+    qualityChecksRes,
   ] = await Promise.all([
     timed("shop_settings", supabase.from("shop_settings").select("*").eq("branch_id", branchId).single()),
     timed("staff_public", supabase.from("staff_public").select("*").eq("branch_id", branchId).order("name")),
@@ -174,6 +178,10 @@ timed(
   "customers",
   supabase.from("customers").select("*").eq("branch_id", branchId).order("name")
 ),
+timed(
+  "inventory_quality_checks",
+  (supabase as any).from("inventory_quality_checks").select("*").eq("branch_id", branchId).order("checked_at", { ascending: false }).limit(500)
+),
   ]);
 
   return {
@@ -195,6 +203,43 @@ timed(
     attendance: unwrap(attendanceRes).map(fromAttendanceRow),
     attendanceEmployees: unwrap(attendanceEmployeesRes).map(fromAttendanceEmployeePublicRow),
     customers: unwrap(customersRes).map(fromCustomerRow),
+    inventoryQualityChecks: unwrap<any[]>(qualityChecksRes as any).map((row) => ({
+      id: row.id,
+      branchId: row.branch_id,
+      inventoryItemId: row.inventory_item_id,
+      inventoryItemName: row.inventory_item_name,
+      result: row.result,
+      note: row.note ?? undefined,
+      checkedById: row.checked_by_id,
+      checkedByName: row.checked_by_name,
+      checkedAt: row.checked_at,
+    })),
+  };
+}
+
+export async function createInventoryQualityCheck(input: Omit<InventoryQualityCheck, "id" | "checkedAt">): Promise<InventoryQualityCheck> {
+  const row = {
+    id: genId("iqc"),
+    branch_id: input.branchId,
+    inventory_item_id: input.inventoryItemId,
+    inventory_item_name: input.inventoryItemName,
+    result: input.result,
+    note: input.note?.trim() || null,
+    checked_by_id: input.checkedById,
+    checked_by_name: input.checkedByName,
+  };
+  const created = unwrap<any>(await (supabase as any).from("inventory_quality_checks").insert(row).select("*").single());
+  if (!created) throw new Error("The inventory check was saved but could not be read back.");
+  return {
+    id: created.id,
+    branchId: created.branch_id,
+    inventoryItemId: created.inventory_item_id,
+    inventoryItemName: created.inventory_item_name,
+    result: created.result,
+    note: created.note ?? undefined,
+    checkedById: created.checked_by_id,
+    checkedByName: created.checked_by_name,
+    checkedAt: created.checked_at,
   };
 }
 
@@ -260,6 +305,104 @@ export async function deleteProduct(id: string): Promise<void> {
   const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+function normalizeCatalogName(value: string) {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Apply the supplied PDF menu to one branch while keeping old catalog rows
+ * inactive (never deleted) so historic order references remain intact. */
+export async function applyPdfMenu(
+  branchId: string,
+  existingCategories: Category[],
+  existingProducts: Product[]
+): Promise<{ categories: Category[]; products: Product[]; added: number; updated: number; deactivated: number }> {
+  const existingCategoryByName = new Map(
+    existingCategories.map((category) => [normalizeCatalogName(category.name.en), category])
+  );
+  const categoryIds = new Map<string, string>();
+  const categoryRows = PDF_MENU.map((entry, index) => {
+    const key = normalizeCatalogName(entry.name.en);
+    const existing = existingCategoryByName.get(key);
+    const id = existing?.id ?? genId("cat");
+    categoryIds.set(key, id);
+    return toCategoryInsertRow(
+      { branchId, name: entry.name, color: entry.color, icon: existing?.icon },
+      id,
+      index
+    );
+  });
+
+  const savedCategoryRows = unwrap(await supabase.from("categories").upsert(categoryRows, { onConflict: "id" }).select("*"));
+  const savedCategories = savedCategoryRows.map(fromCategoryRow);
+
+  const categoryNameById = new Map(existingCategories.map((category) => [category.id, normalizeCatalogName(category.name.en)]));
+  const existingByMenuKey = new Map<string, Product[]>();
+  for (const product of existingProducts) {
+    const categoryKey = categoryNameById.get(product.categoryId) ?? "";
+    const key = `${categoryKey}::${normalizeCatalogName(product.name.en)}`;
+    existingByMenuKey.set(key, [...(existingByMenuKey.get(key) ?? []), product]);
+  }
+
+  const usedIds = new Set<string>();
+  let added = 0;
+  let updated = 0;
+  let sortOrder = 0;
+  const activeProducts: Product[] = [];
+  for (const category of PDF_MENU) {
+    const categoryId = categoryIds.get(normalizeCatalogName(category.name.en))!;
+    for (const item of category.items) {
+      const key = `${normalizeCatalogName(category.name.en)}::${normalizeCatalogName(item.name.en)}`;
+      const match = existingByMenuKey.get(key)?.find((product) => !usedIds.has(product.id));
+      const product: Product = match
+        ? {
+            ...match,
+            name: item.name,
+            categoryId,
+            price: item.price,
+            secondaryPrice: undefined,
+            isActive: true,
+            sortOrder,
+          }
+        : {
+            id: genId("prod"),
+            branchId,
+            name: item.name,
+            categoryId,
+            price: item.price,
+            isActive: true,
+            sortOrder,
+          };
+      if (match) {
+        usedIds.add(match.id);
+        updated++;
+      } else {
+        added++;
+      }
+      activeProducts.push(product);
+      sortOrder++;
+    }
+  }
+
+  const inactiveProducts = existingProducts
+    .filter((product) => !usedIds.has(product.id) && product.isActive)
+    .map((product) => ({ ...product, isActive: false }));
+  const productRows = [...activeProducts, ...inactiveProducts].map((product) =>
+    toProductInsertRow(product, product.id, product.sortOrder)
+  );
+  const savedProductRows = unwrap(await supabase.from("products").upsert(productRows, { onConflict: "id" }).select("*"));
+
+  const categories = [
+    ...existingCategories.filter((category) => !savedCategories.some((saved) => saved.id === category.id)),
+    ...savedCategories,
+  ].sort((a, b) => a.sortOrder - b.sortOrder);
+  const products = [
+    ...existingProducts.filter((product) => !savedProductRows.some((saved: any) => saved.id === product.id)),
+    ...savedProductRows.map(fromProductRow),
+  ].sort((a, b) => a.sortOrder - b.sortOrder);
+
+  return { categories, products, added, updated, deactivated: inactiveProducts.length };
+}
 // ---- customers -------------------------------------------------------------
 
 export async function createCustomer(
@@ -320,6 +463,11 @@ export async function searchCustomers(
     .limit(20);
 
   return unwrap(res).map(fromCustomerRow);
+}
+
+export async function fetchCustomerById(customerId: string): Promise<Customer> {
+  const res = await supabase.from("customers").select("*").eq("id", customerId).single();
+  return fromCustomerRow(unwrap(res));
 }
 
 export async function refreshCustomerLoyalty(
@@ -521,6 +669,16 @@ export async function verifyStaffPin(staffId: string, pin: string, branchId: str
   return (data as StaffUser | null) ?? null;
 }
 
+/** Finds the active staff member from their PIN without exposing PIN hashes or listing users first. */
+export async function authenticateStaffPin(pin: string, branchId: string): Promise<StaffUser | null> {
+  const { data, error } = await supabase.rpc("authenticate_staff_pin", {
+    p_pin: pin,
+    p_branch_id: branchId,
+  });
+  if (error) throw new Error(error.message);
+  return (data as StaffUser | null) ?? null;
+}
+
 // ---- settings -------------------------------------------------------------
 
 export async function updateSettings(branchId: string, patch: Partial<ShopSettings>): Promise<ShopSettings> {
@@ -531,6 +689,56 @@ export async function updateSettings(branchId: string, patch: Partial<ShopSettin
     .select()
     .single();
   return fromSettingsRow(unwrap(res));
+}
+
+// ---- promo codes ----------------------------------------------------------
+
+function fromPromoCodeRow(row: any): PromoCode {
+  return {
+    id: row.id,
+    branchId: row.branch_id,
+    code: row.code,
+    discountPercent: Number(row.discount_percent),
+    durationDays: Number(row.duration_days),
+    customerId: row.customer_id ?? undefined,
+    createdAt: row.created_at,
+    expiresAt: row.expires_at,
+  };
+}
+
+export async function fetchPromoCodes(branchId: string): Promise<PromoCode[]> {
+  const { data, error } = await supabase.from("promo_codes").select("*").eq("branch_id", branchId).order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  const promoCodes = (data ?? []).map(fromPromoCodeRow);
+  const customerIds = [...new Set(promoCodes.map((promo) => promo.customerId).filter((id): id is string => Boolean(id)))];
+  if (customerIds.length === 0) return promoCodes;
+  const { data: customers, error: customerError } = await supabase.from("customers").select("id, name, phone").in("id", customerIds);
+  if (customerError) throw new Error(customerError.message);
+  const customerById = new Map((customers ?? []).map((customer) => [customer.id, customer]));
+  return promoCodes.map((promo) => ({
+    ...promo,
+    customerName: customerById.get(promo.customerId ?? "")?.name,
+    customerPhone: customerById.get(promo.customerId ?? "")?.phone,
+  }));
+}
+
+export async function createPromoCode(input: { branchId: string; code: string; discountPercent: number; durationDays: number; customerId: string }): Promise<PromoCode> {
+  const expiresAt = new Date(Date.now() + input.durationDays * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase.from("promo_codes").insert({
+    branch_id: input.branchId,
+    code: input.code.trim().toUpperCase(),
+    discount_percent: input.discountPercent,
+    duration_days: input.durationDays,
+    customer_id: input.customerId,
+    expires_at: expiresAt,
+  }).select().single();
+  if (error) throw new Error(error.message);
+  return fromPromoCodeRow(data);
+}
+
+export async function deletePromoCode(id: string): Promise<void> {
+  const { error } = await supabase.from("promo_codes").delete().eq("id", id);
+  if (error) throw new Error(error.message);
 }
 // ---- loyalty ---------------------------------------------------------------
 
@@ -600,7 +808,12 @@ export async function createOrder(
     p_order: orderFields,
     p_lines: lines,
   });
-  return unwrap(res) as unknown as Order & { inventoryUpdates: { id: string; quantity: number }[] };
+  const created = unwrap(res) as unknown as Order & { inventoryUpdates: { id: string; quantity: number }[] };
+  if (order.promoCode) {
+    const { error } = await supabase.from("orders").update({ promo_code: order.promoCode }).eq("id", created.id);
+    if (error) console.error("Order completed, but saving its promo code failed:", error.message);
+  }
+  return { ...created, promoCode: order.promoCode };
 }
 
 export async function voidOrder(id: string): Promise<void> {
@@ -775,15 +988,20 @@ export async function checkInAttendance(input: {
   officialEnd: string;
   graceMinutes?: number;
 }): Promise<Attendance> {
-  const res = await supabase.rpc("check_in_attendance", {
+  const args: Record<string, string | number> = {
     p_branch_id: input.branchId,
     p_employee_id: input.employeeId,
     p_employee_name: input.employeeName,
     p_shift_key: input.shiftKey,
     p_official_start: input.officialStart,
     p_official_end: input.officialEnd,
-    p_grace_minutes: input.graceMinutes ?? 0,
-  });
+  };
+  // Older deployed databases still expose the six-argument RPC. Since zero
+  // grace is the default, omit the optional argument unless it is needed;
+  // Postgres then matches both the old function and the newer function whose
+  // seventh argument has a default.
+  if ((input.graceMinutes ?? 0) > 0) args.p_grace_minutes = input.graceMinutes!;
+  const res = await supabase.rpc("check_in_attendance", args);
   return fromAttendanceRow(unwrap(res));
 }
 

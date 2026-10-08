@@ -153,6 +153,7 @@ create table orders (
   subtotal numeric not null,
   discount_amount numeric not null default 0,
   discount_percent numeric,
+  promo_code text,
   tax_amount numeric not null default 0,
   tax_rate numeric not null default 0,
   total numeric not null,
@@ -177,6 +178,18 @@ create table order_lines (
   note text
 );
 
+create table promo_codes (
+  id text primary key default gen_random_uuid()::text,
+  branch_id text not null references branches(id) on delete cascade,
+  code text not null,
+  discount_percent numeric not null check (discount_percent > 0 and discount_percent <= 100),
+  duration_days integer not null check (duration_days > 0),
+  customer_id text,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  unique (branch_id, code)
+);
+
 create table expenses (
   id text primary key,
   branch_id text not null references branches(id),
@@ -199,6 +212,20 @@ create table stock_movements (
   order_id text references orders(id),
   created_at timestamptz not null default now()
 );
+
+create table inventory_quality_checks (
+  id text primary key,
+  branch_id text not null references branches(id),
+  inventory_item_id text not null,
+  inventory_item_name jsonb not null,
+  result text not null check (result in ('good', 'needs_attention')),
+  note text,
+  checked_by_id text not null,
+  checked_by_name text not null,
+  checked_at timestamptz not null default now()
+);
+create index inventory_quality_checks_branch_checked_at_idx
+  on inventory_quality_checks(branch_id, checked_at desc);
 
 create table purchases (
   id text primary key,
@@ -231,7 +258,9 @@ alter table orders enable row level security;
 alter table order_lines enable row level security;
 alter table expenses enable row level security;
 alter table stock_movements enable row level security;
+alter table inventory_quality_checks enable row level security;
 alter table purchases enable row level security;
+alter table promo_codes enable row level security;
 alter table shifts enable row level security;
 alter table staff enable row level security;
 
@@ -263,10 +292,14 @@ create policy "anon full access" on orders for all using (true) with check (true
 create policy "anon full access" on order_lines for all using (true) with check (true);
 create policy "anon full access" on expenses for all using (true) with check (true);
 create policy "anon full access" on stock_movements for all using (true) with check (true);
+create policy "anon read inventory quality checks" on inventory_quality_checks for select using (true);
+create policy "anon insert inventory quality checks" on inventory_quality_checks for insert with check (true);
 create policy "anon full access" on purchases for all using (true) with check (true);
+create policy "anon full access" on promo_codes for all using (true) with check (true);
 create policy "anon full access" on shifts for all using (true) with check (true);
 
-grant select, insert, update, delete on branches, shop_settings, categories, modifier_groups, inventory_items, products, orders, order_lines, expenses, stock_movements, purchases, shifts to anon, authenticated;
+grant select, insert, update, delete on branches, shop_settings, categories, modifier_groups, inventory_items, products, orders, order_lines, expenses, stock_movements, purchases, shifts, promo_codes to anon, authenticated;
+grant select, insert on inventory_quality_checks to anon, authenticated;
 grant select on staff_public to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
@@ -302,6 +335,43 @@ end;
 $$;
 
 grant execute on function verify_staff_pin(text, text, text) to anon, authenticated;
+
+-- Direct-PIN login: resolve the employee from the PIN without exposing hashes.
+create or replace function authenticate_staff_pin(p_pin text, p_branch_id text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_staff staff%rowtype;
+  v_staff_json jsonb;
+  v_matches integer;
+begin
+  if p_pin !~ '^[0-9]{4}$' then
+    return null;
+  end if;
+  select count(*) into v_matches
+  from staff
+  where branch_id = p_branch_id and is_active = true
+    and pin_hash is not null and pin_hash = crypt(p_pin, pin_hash);
+  if v_matches <> 1 then
+    return null;
+  end if;
+  select * into v_staff from staff
+  where branch_id = p_branch_id and is_active = true
+    and pin_hash = crypt(p_pin, pin_hash)
+  limit 1;
+  v_staff_json := to_jsonb(v_staff);
+  return jsonb_build_object(
+    'id', v_staff.id, 'branchId', v_staff.branch_id, 'name', v_staff.name,
+    'role', v_staff.role, 'avatarColor', v_staff.avatar_color,
+    'isActive', v_staff.is_active, 'permissions', v_staff_json -> 'permissions'
+  );
+end;
+$$;
+revoke all on function authenticate_staff_pin(text, text) from public;
+grant execute on function authenticate_staff_pin(text, text) to anon, authenticated;
 
 -- ----------------------------------------------------------------------------
 -- save_staff — the only path that can set a staff PIN. Hashes it server-side;
@@ -698,7 +768,7 @@ declare
   v_inventory_updates jsonb := '[]'::jsonb;
 begin
   insert into orders (
-    id, branch_id, shift_id, subtotal, discount_amount, discount_percent, tax_amount, tax_rate,
+    id, branch_id, shift_id, subtotal, discount_amount, discount_percent, promo_code, tax_amount, tax_rate,
     total, payment, status, type, table_number, customer_name,
     cashier_id, cashier_name, created_at
   ) values (
@@ -708,6 +778,7 @@ begin
     (p_order->>'subtotal')::numeric,
     (p_order->>'discountAmount')::numeric,
     nullif(p_order->>'discountPercent', '')::numeric,
+    nullif(p_order->>'promoCode', ''),
     (p_order->>'taxAmount')::numeric,
     (p_order->>'taxRate')::numeric,
     (p_order->>'total')::numeric,

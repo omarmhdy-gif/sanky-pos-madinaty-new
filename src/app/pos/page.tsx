@@ -11,7 +11,6 @@ import { HeldOrdersDialog } from "@/components/pos/HeldOrdersDialog";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useCartStore } from "@/lib/store/useCartStore";
-import { useFavoritesStore } from "@/lib/store/useHeldOrdersStore";
 import { useI18n } from "@/lib/i18n";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
@@ -20,16 +19,17 @@ import type { Product } from "@/lib/types";
 import { ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StartupValidation } from "@/components/pos/StartupValidation";
+import { InventoryQualityCheckDialog } from "@/components/pos/InventoryQualityCheckDialog";
+import { ClipboardCheck } from "lucide-react";
 
 export default function PosPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const products = useDataStore((s) => s.products);
   const categories = useDataStore((s) => s.categories);
   const shifts = useDataStore((s) => s.shifts);
   const currentUser = useAuthStore((s) => s.currentUser);
   const addLine = useCartStore((s) => s.addLine);
   const cartLines = useCartStore((s) => s.lines);
-  const { favoriteIds, recentIds, toggleFavorite, trackRecent } = useFavoritesStore();
   const openStartShift = useShiftUIStore((s) => s.openStartShift);
 
   // Browsing/scanning/building a cart never requires a shift — only
@@ -50,15 +50,12 @@ export default function PosPage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
+  const [inventoryCheckOpen, setInventoryCheckOpen] = useState(false);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.isActive);
 
-    if (activeCategory === "favorites") {
-      list = list.filter((p) => favoriteIds.includes(p.id));
-    } else if (activeCategory === "recent") {
-      list = recentIds.map((id) => list.find((p) => p.id === id)).filter(Boolean) as Product[];
-    } else if (activeCategory !== "all") {
+    if (activeCategory !== "all") {
       list = list.filter((p) => p.categoryId === activeCategory);
     }
 
@@ -70,10 +67,16 @@ export default function PosPage() {
     }
 
     return list.sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [products, activeCategory, search, favoriteIds, recentIds]);
+  }, [products, activeCategory, search]);
+
+  const visibleCategories = useMemo(() => {
+    const activeCategoryIds = new Set(products.filter((product) => product.isActive).map((product) => product.categoryId));
+    return categories
+      .filter((category) => activeCategoryIds.has(category.id))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+  }, [categories, products]);
 
   const handleSelectProduct = (product: Product) => {
-    trackRecent(product.id);
     if (product.modifierGroupIds && product.modifierGroupIds.length > 0) {
       setModifierProduct(product);
       setModifierOpen(true);
@@ -118,8 +121,14 @@ export default function PosPage() {
       <div className="flex h-full min-h-0">
         {/* Product browsing area */}
         <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex justify-end border-b border-border px-3 py-2">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setInventoryCheckOpen(true)}>
+              <ClipboardCheck className="h-4 w-4" />
+              {locale === "ar" ? "فحص مواد المخزون" : "Check inventory"}
+            </Button>
+          </div>
           <CategoryTabs
-            categories={categories.sort((a, b) => a.sortOrder - b.sortOrder)}
+            categories={visibleCategories}
             activeId={activeCategory}
             onSelect={setActiveCategory}
             search={search}
@@ -130,8 +139,6 @@ export default function PosPage() {
             <ProductGrid
               products={filteredProducts}
               onSelect={handleSelectProduct}
-              favoriteIds={favoriteIds}
-              onToggleFavorite={toggleFavorite}
             />
           </div>
         </div>
@@ -176,6 +183,7 @@ export default function PosPage() {
       <ModifierDialog product={modifierProduct} open={modifierOpen} onOpenChange={setModifierOpen} />
       <PaymentDialog open={paymentOpen} onOpenChange={setPaymentOpen} onOrderComplete={() => setSearch("")} />
       <HeldOrdersDialog open={heldOpen} onOpenChange={setHeldOpen} />
+      <InventoryQualityCheckDialog open={inventoryCheckOpen} onOpenChange={setInventoryCheckOpen} />
     </AppShell>
   );
 }

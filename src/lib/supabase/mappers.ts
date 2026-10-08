@@ -284,6 +284,7 @@ export function fromOrderRow(row: any): Order {
     subtotal: Number(row.subtotal),
     discountAmount: Number(row.discount_amount),
     discountPercent: row.discount_percent != null ? Number(row.discount_percent) : undefined,
+    promoCode: row.promo_code ?? undefined,
     taxAmount: Number(row.tax_amount),
     taxRate: Number(row.tax_rate),
     total: Number(row.total),

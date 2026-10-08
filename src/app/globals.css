@@ -2,131 +2,353 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   SANKY POS — Global Design System
+   Ivory / Forest / Champagne
+   ========================================================= */
+
 @layer base {
   :root {
-    --background: 30 40% 98%;
-    --foreground: 25 30% 12%;
+    /* Page */
+    --background: 42 38% 97%;
+    --foreground: 150 16% 14%;
 
+    /* Cards */
     --card: 0 0% 100%;
-    --card-foreground: 25 30% 12%;
+    --card-foreground: 150 16% 14%;
 
+    /* Popovers / Dialogs */
     --popover: 0 0% 100%;
-    --popover-foreground: 25 30% 12%;
+    --popover-foreground: 150 16% 14%;
 
-    --primary: 25 45% 28%;
-    --primary-foreground: 30 40% 98%;
+    /* Espresso Brown */
+    --primary: 151 31% 23%;
+    --primary-foreground: 42 38% 97%;
 
-    --secondary: 30 25% 93%;
-    --secondary-foreground: 25 30% 15%;
+    /* Soft Cream */
+    --secondary: 42 25% 92%;
+    --secondary-foreground: 150 17% 20%;
 
-    --muted: 30 20% 94%;
-    --muted-foreground: 25 15% 40%;
+    /* Muted */
+    --muted: 42 23% 93%;
+    --muted-foreground: 150 8% 43%;
 
-    --accent: 30 30% 90%;
-    --accent-foreground: 25 30% 15%;
+    /* Olive / Sage accent */
+    --accent: 39 45% 88%;
+    --accent-foreground: 151 31% 23%;
 
-    --destructive: 0 72% 51%;
+    /* Destructive */
+    --destructive: 2 68% 49%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 60% 32%;
+    /* Success / Olive Green */
+    --success: 151 31% 34%;
     --success-foreground: 0 0% 100%;
 
-    --border: 30 20% 88%;
-    --input: 30 20% 88%;
-    --ring: 25 45% 28%;
+    /* Borders / Inputs */
+    --border: 39 20% 86%;
+    --input: 39 20% 82%;
 
-    --radius: 0.75rem;
+    /* Focus ring */
+    --ring: 151 31% 34%;
+
+    /* Slightly softer corners */
+    --radius: 1rem;
   }
+
+  /* =======================================================
+     DARK MODE
+     ======================================================= */
 
   .dark {
-    --background: 25 25% 8%;
-    --foreground: 30 30% 95%;
+    --background: 154 22% 8%;
+    --foreground: 42 29% 93%;
 
-    --card: 25 22% 11%;
-    --card-foreground: 30 30% 95%;
+    --card: 153 20% 11%;
+    --card-foreground: 42 29% 93%;
 
-    --popover: 25 22% 11%;
-    --popover-foreground: 30 30% 95%;
+    --popover: 153 20% 11%;
+    --popover-foreground: 42 29% 93%;
 
-    --primary: 30 45% 62%;
-    --primary-foreground: 25 30% 10%;
+    /* Warm Gold / Caramel */
+    --primary: 39 48% 67%;
+    --primary-foreground: 154 22% 10%;
 
-    --secondary: 25 18% 16%;
-    --secondary-foreground: 30 30% 95%;
+    --secondary: 153 15% 17%;
+    --secondary-foreground: 42 29% 93%;
 
-    --muted: 25 18% 15%;
-    --muted-foreground: 30 15% 65%;
+    --muted: 153 15% 16%;
+    --muted-foreground: 42 12% 67%;
 
-    --accent: 25 18% 18%;
-    --accent-foreground: 30 30% 95%;
+    /* Dark Olive */
+    --accent: 39 22% 22%;
+    --accent-foreground: 42 45% 83%;
 
-    --destructive: 0 62% 50%;
+    --destructive: 2 62% 49%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 152 50% 42%;
+    --success: 151 32% 42%;
     --success-foreground: 0 0% 100%;
 
-    --border: 25 18% 20%;
-    --input: 25 18% 20%;
-    --ring: 30 45% 62%;
+    --border: 153 13% 23%;
+    --input: 153 13% 25%;
+
+    --ring: 39 48% 67%;
   }
 }
+
+/* =========================================================
+   BASE
+   ========================================================= */
 
 @layer base {
   * {
     @apply border-border;
   }
-  /* Hard guarantee that the document itself never scrolls, on any browser.
-     This app is a fixed-height "app shell" (Square/Toast-style POS): every
-     page's own root container is responsible for its own internal
-     scrolling (see AppShell.tsx's <main overflow-y-auto>), never the
-     document. height:100% here (NOT 100vh/100dvh — see .h-app below) is
-     the one sizing method with zero browser-support caveats, so this
-     safety net can never itself be the thing that fails silently. */
-  html, body {
+
+  /*
+    The POS is a fixed-height application.
+    The document itself should never scroll.
+  */
+
+  html,
+  body {
     height: 100%;
     overflow: hidden;
   }
+
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+
+    font-feature-settings:
+      "cv02",
+      "cv03",
+      "cv04",
+      "cv11";
+
+    /* Slightly warmer rendering */
+    text-rendering: optimizeLegibility;
+    background-image: radial-gradient(ellipse at 12% 0%, hsl(var(--accent) / 0.28), transparent 36%);
   }
+
   html[dir="rtl"] body {
     letter-spacing: 0;
   }
+
+  /*
+    Better selection color
+  */
+
+  ::selection {
+    background: hsl(var(--primary) / 0.16);
+    color: hsl(var(--foreground));
+  }
 }
 
+/* =========================================================
+   GLOBAL UI POLISH
+   ========================================================= */
+
+@layer components {
+  /*
+    Premium card feel.
+    Existing Card components will inherit the new variables.
+  */
+
+  .sanky-card {
+    @apply rounded-2xl border bg-card;
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.035),
+      0 8px 24px hsl(var(--foreground) / 0.045);
+  }
+
+  .sanky-sidebar {
+    background: linear-gradient(180deg, hsl(151 31% 19%) 0%, hsl(153 28% 15%) 100%);
+    color: hsl(42 29% 93%);
+  }
+
+  .sanky-app {
+    background:
+      radial-gradient(ellipse at 12% 0%, hsl(var(--accent) / 0.3), transparent 36%),
+      hsl(var(--background));
+  }
+
+  /*
+    Soft elevated panel
+  */
+
+  .sanky-panel {
+    @apply rounded-2xl border bg-card;
+    box-shadow:
+      0 2px 5px hsl(var(--foreground) / 0.035),
+      0 12px 30px hsl(var(--foreground) / 0.05);
+  }
+
+  /*
+    KPI / statistic card
+  */
+
+  .sanky-stat-card {
+    @apply rounded-2xl border bg-card p-5;
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.035),
+      0 8px 22px hsl(var(--foreground) / 0.045);
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      border-color 180ms ease;
+  }
+
+  .sanky-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 3px 6px hsl(var(--foreground) / 0.045),
+      0 14px 30px hsl(var(--foreground) / 0.07);
+  }
+
+  /*
+    Small icon container
+  */
+
+  .sanky-icon-box {
+    @apply flex items-center justify-center rounded-xl;
+    background: hsl(var(--primary) / 0.09);
+    color: hsl(var(--primary));
+  }
+
+  /*
+    Olive icon variant
+  */
+
+  .sanky-icon-box-olive {
+    @apply flex items-center justify-center rounded-xl;
+    background: hsl(var(--success) / 0.11);
+    color: hsl(var(--success));
+  }
+}
+
+/* =========================================================
+   UTILITIES
+   ========================================================= */
+
 @layer utilities {
-  /* Full-viewport height, with a real fallback for browsers that don't
-     support the `dvh` unit (Chrome added it in v108, Nov 2022 — some
-     managed/update-frozen ChromeOS devices are still on an older build).
-     An unsupported CSS value is invalid and gets silently dropped per-
-     declaration, NOT replaced with a fallback automatically — so this
-     relies on the classic two-declaration pattern: an older browser
-     ignores the invalid `100dvh` line entirely and keeps the `100vh`
-     line above it; a modern browser applies both in order and the later,
-     valid `100dvh` line wins the cascade. Without the first line, an
-     unsupported browser is left with NO height declaration at all, which
-     is exactly what caused the whole document (not just an inner panel)
-     to scroll on affected Chromebooks — every full-page container in this
-     app (AppShell, login, branch-select, etc.) must use this, never the
-     bare `h-dvh` Tailwind utility, for that reason. */
+  /*
+    Full viewport application height.
+    Keep both declarations for browser compatibility.
+  */
+
   .h-app {
     height: 100vh;
     height: 100dvh;
   }
+
+  /*
+    Hide scrollbar while keeping scrolling.
+  */
+
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /*
+    Thin scrollbar
+  */
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
+    @apply rounded-full bg-border;
+  }
+
+  /*
+    Premium subtle shadow
+  */
+
+  .shadow-sanky {
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.035),
+      0 8px 24px hsl(var(--foreground) / 0.05);
+  }
+
+  /*
+    Stronger card shadow
+  */
+
+  .shadow-sanky-lg {
+    box-shadow:
+      0 3px 6px hsl(var(--foreground) / 0.04),
+      0 14px 32px hsl(var(--foreground) / 0.07);
+  }
+
+  /*
+    Warm background surface
+  */
+
+  .bg-sanky-cream {
+    background: hsl(38 38% 96%);
+  }
+
+  /*
+    Espresso text
+  */
+
+  .text-sanky-espresso {
+    color: hsl(27 42% 25%);
+  }
+
+  /*
+    Olive text
+  */
+
+  .text-sanky-olive {
+    color: hsl(82 30% 34%);
+  }
+
+  /*
+    Espresso translucent background
+  */
+
+  .bg-sanky-espresso-soft {
+    background: hsl(27 42% 25% / 0.08);
+  }
+
+  /*
+    Olive translucent background
+  */
+
+  .bg-sanky-olive-soft {
+    background: hsl(82 30% 34% / 0.10);
+  }
+}
+
+/* =========================================================
+   DARK MODE SHADOW ADJUSTMENTS
+   ========================================================= */
+
+@layer base {
+  .dark .sanky-card,
+  .dark .sanky-panel,
+  .dark .sanky-stat-card {
+    box-shadow:
+      0 1px 2px hsl(0 0% 0% / 0.18),
+      0 10px 28px hsl(0 0% 0% / 0.18);
+  }
+
+  .dark .sanky-stat-card:hover {
+    box-shadow:
+      0 3px 6px hsl(0 0% 0% / 0.22),
+      0 16px 34px hsl(0 0% 0% / 0.24);
   }
 }

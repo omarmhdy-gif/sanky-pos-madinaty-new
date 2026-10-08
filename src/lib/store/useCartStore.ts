@@ -7,6 +7,7 @@ interface CartStore {
   orderType: OrderType;
   tableNumber?: string;
   customerName?: string;
+  customerId?: string;
   discountPercent: number;
   // A fixed-amount discount ("deduct exactly 50 EGP"), as an alternative to
   // discountPercent — the two are mutually exclusive: setting one clears
@@ -14,6 +15,7 @@ interface CartStore {
   // deduction (see computeDiscountAmount below, the single place both the
   // cart display and the payment screen read this from).
   discountFixedAmount: number;
+  promoCode?: string;
 
   addLine: (line: Omit<CartLine, "lineId">) => void;
   incrementLine: (lineId: string) => void;
@@ -24,8 +26,10 @@ interface CartStore {
   setOrderType: (t: OrderType) => void;
   setTableNumber: (v: string) => void;
   setCustomerName: (v: string) => void;
+  setCustomerId: (v: string | undefined) => void;
   setDiscountPercent: (v: number) => void;
   setDiscountFixedAmount: (v: number) => void;
+  applyPromoCode: (code: string | undefined, percent: number) => void;
 
   // Multi Pricing — a one-shot bulk action, not a persistent mode: pressing
   // "Second Price" switches every line CURRENTLY in the cart to that
@@ -68,6 +72,7 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   orderType: "takeaway",
   discountPercent: 0,
   discountFixedAmount: 0,
+  promoCode: undefined,
 
   addLine: (line) =>
     set((state) => {
@@ -107,13 +112,15 @@ export const useCartStore = create<CartStore>()((set, get) => ({
     })),
 
   clearCart: () =>
-    set({ lines: [], discountPercent: 0, discountFixedAmount: 0, tableNumber: undefined, customerName: undefined }),
+    set({ lines: [], discountPercent: 0, discountFixedAmount: 0, promoCode: undefined, tableNumber: undefined, customerName: undefined, customerId: undefined }),
 
   setOrderType: (t) => set({ orderType: t }),
   setTableNumber: (v) => set({ tableNumber: v }),
   setCustomerName: (v) => set({ customerName: v }),
-  setDiscountPercent: (v) => set({ discountPercent: Math.max(0, Math.min(100, v)), discountFixedAmount: 0 }),
-  setDiscountFixedAmount: (v) => set({ discountFixedAmount: Math.max(0, v), discountPercent: 0 }),
+  setCustomerId: (v) => set({ customerId: v }),
+  setDiscountPercent: (v) => set({ discountPercent: Math.max(0, Math.min(100, v)), discountFixedAmount: 0, promoCode: undefined }),
+  setDiscountFixedAmount: (v) => set({ discountFixedAmount: Math.max(0, v), discountPercent: 0, promoCode: undefined }),
+  applyPromoCode: (code, percent) => set({ promoCode: code, discountPercent: Math.max(0, Math.min(100, percent)), discountFixedAmount: 0 }),
 
   applySecondaryPricing: (getSecondaryPrice) =>
     set((state) => ({

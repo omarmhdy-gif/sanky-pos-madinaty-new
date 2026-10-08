@@ -24,10 +24,12 @@ export function ShiftDialog({
   shift,
   open,
   onOpenChange,
+  onFinished,
 }: {
   shift: Shift | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onFinished?: () => void;
 }) {
   const { t, locale } = useI18n();
   const orders = useDataStore((s) => s.orders);
@@ -228,6 +230,7 @@ export function ShiftDialog({
               <Row label={t.shifts.startTime} value={formatDateTime(report.startedAt, locale)} />
               <Row label={t.shifts.endTime} value={report.closedAt ? formatDateTime(report.closedAt, locale) : "—"} />
               <Row label={t.shifts.ordersCount} value={formatNumber(report.ordersCount ?? 0)} />
+              <Row label={t.shifts.openingCash} value={formatMoney(report.openingCash, settings.currencySymbol)} />
               <Row label={t.shifts.cashSales} value={formatMoney(report.cashSales ?? 0, settings.currencySymbol)} />
               <Row label={t.shifts.cardSales} value={formatMoney(report.cardSales ?? 0, settings.currencySymbol)} />
               <Row label={t.shifts.expenses} value={formatMoney(report.expensesTotal ?? 0, settings.currencySymbol)} />
@@ -236,7 +239,7 @@ export function ShiftDialog({
               <Row label={t.shifts.actualCash} value={formatMoney(report.actualCash ?? 0, settings.currencySymbol)} />
               <Row
                 label={t.shifts.difference}
-                value={formatMoney(report.difference ?? 0, settings.currencySymbol)}
+                value={`${formatMoney(report.difference ?? 0, settings.currencySymbol)} · ${diffLabel}`}
                 bold
               />
             </div>
@@ -254,7 +257,7 @@ export function ShiftDialog({
                 <Printer className="h-4 w-4" />
                 {t.shifts.printReport}
               </Button>
-              <Button onClick={() => handleClose(false)}>{t.shifts.finish}</Button>
+              <Button onClick={() => { handleClose(false); onFinished?.(); }}>{t.shifts.finish}</Button>
             </DialogFooter>
           </>
         )}
