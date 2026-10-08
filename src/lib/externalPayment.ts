@@ -10,11 +10,6 @@ export const EXTERNAL_PAYMENT_ICON_KEYS = Object.keys(EXTERNAL_PAYMENT_ICONS) as
 
 export const DEFAULT_EXTERNAL_PAYMENT_NAME = { en: "Talabat", ar: "طلبات" };
 export const DEFAULT_EXTERNAL_PAYMENT_ICON: ExternalPaymentIconKey = "Bike";
-export const DEFAULT_EXTERNAL_PAYMENT_METHOD: ExternalPaymentMethod = {
-  id: "talabat",
-  name: DEFAULT_EXTERNAL_PAYMENT_NAME,
-  icon: DEFAULT_EXTERNAL_PAYMENT_ICON,
-};
 
 /** The actual icon component to render — falls back to Bike for an unset or
  * unrecognized key (e.g. settings loaded before migration_2_3.sql ran). */
@@ -29,12 +24,10 @@ export function externalPaymentName(settings: Pick<ShopSettings, "externalPaymen
 export function externalPaymentMethods(
   settings: Pick<ShopSettings, "externalPaymentMethods" | "externalPaymentName" | "externalPaymentIcon">
 ): ExternalPaymentMethod[] {
-  if (settings.externalPaymentMethods !== undefined) return settings.externalPaymentMethods;
-  return [{
-    ...DEFAULT_EXTERNAL_PAYMENT_METHOD,
-    name: settings.externalPaymentName ?? DEFAULT_EXTERNAL_PAYMENT_NAME,
-    icon: settings.externalPaymentIcon ?? DEFAULT_EXTERNAL_PAYMENT_ICON,
-  }];
+  // Talabat was the original built-in external method. Keep historical
+  // orders readable, but do not expose that legacy entry as a configurable
+  // or selectable payment method anymore.
+  return (settings.externalPaymentMethods ?? []).filter((method) => method.id !== "talabat");
 }
 
 export function externalPaymentMethodById(

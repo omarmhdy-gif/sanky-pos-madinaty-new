@@ -39,7 +39,7 @@ export function ExternalPaymentManager() {
     setDirty(true);
   };
 
-  const addMethod = () => {
+  const addMethod = async () => {
     const en = newNameEn.trim();
     const ar = newNameAr.trim();
     if (!en || !ar) {
@@ -48,10 +48,22 @@ export function ExternalPaymentManager() {
     }
 
     const id = `external_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
-    setMethods((current) => [...current, { id, name: { en, ar }, icon: newIcon }]);
+    const nextMethods = [...methods, { id, name: { en, ar }, icon: newIcon }];
+    setSaving(true);
+    const firstMethod = nextMethods[0];
+    const saved = await updateSettings({
+      externalPaymentMethods: nextMethods,
+      externalPaymentName: firstMethod?.name ?? DEFAULT_EXTERNAL_PAYMENT_NAME,
+      externalPaymentIcon: firstMethod?.icon ?? DEFAULT_EXTERNAL_PAYMENT_ICON,
+    });
+    setSaving(false);
+    if (!saved) return;
+
+    setMethods(nextMethods);
     setNewNameEn("");
     setNewNameAr("");
-    setDirty(true);
+    setDirty(false);
+    toast(t.settings.externalPaymentSaved, "success");
   };
 
   const saveMethods = async () => {
@@ -176,7 +188,7 @@ export function ExternalPaymentManager() {
                 </button>
               );
             })}
-            <Button type="button" className="ms-auto" onClick={addMethod} disabled={!newNameEn.trim() || !newNameAr.trim()}>
+            <Button type="button" className="ms-auto" onClick={addMethod} disabled={!newNameEn.trim() || !newNameAr.trim() || saving}>
               <Plus className="h-4 w-4" /> {t.settings.externalPaymentAddButton}
             </Button>
           </div>
