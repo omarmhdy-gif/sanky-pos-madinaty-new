@@ -57,6 +57,7 @@ const ar = {
     finance: "المالية",
     reports: "التقارير",
     employees: "الموظفون",
+    customers: "العملاء",
     settings: "الإعدادات",
     devices: "الأجهزة",
     attendance: "الحضور",

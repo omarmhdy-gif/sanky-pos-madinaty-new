@@ -55,6 +55,7 @@ const en = {
     finance: "Finance",
     reports: "Reports",
     employees: "Employees",
+    customers: "Customers",
     settings: "Settings",
     devices: "Devices",
     attendance: "Attendance",

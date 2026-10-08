@@ -17,7 +17,7 @@ import type { UserRole, PermissionKey, StaffUser } from "@/lib/types";
 export interface NavItem {
   href: string;
   icon: typeof LayoutDashboard;
-  key: "dashboard" | "pos" | "inventory" | "products" | "recipes" | "orders" | "finance" | "reports" | "employees" | "settings" | "devices" | "attendance";
+  key: "dashboard" | "pos" | "inventory" | "products" | "recipes" | "orders" | "finance" | "reports" | "employees" | "customers" | "settings" | "devices" | "attendance";
   roles: UserRole[];
   /** Granular permission gate (any-of — Finance needs either "finance" or
    * "purchases", everything else has exactly one entry). Absent for
@@ -44,6 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/finance", icon: Landmark, key: "finance", roles: ["owner", "cashier"], permissions: ["finance", "purchases"] },
   { href: "/reports", icon: BarChart3, key: "reports", roles: ["owner", "cashier"], permissions: ["reports"] },
   { href: "/employees", icon: Users, key: "employees", roles: ["owner", "cashier"], permissions: ["employees"] },
+  { href: "/customers", icon: Users, key: "customers", roles: ["owner", "cashier"], permissions: ["customers"] },
   { href: "/settings", icon: Settings, key: "settings", roles: ["owner", "cashier"], permissions: ["settings"] },
   { href: "/devices", icon: MonitorSmartphone, key: "devices", roles: ["owner"] },
 ];
@@ -68,6 +69,7 @@ export const ALL_PERMISSION_KEYS: PermissionKey[] = [
   "reports",
   "attendance",
   "employees",
+  "customers",
   "settings",
   "dashboard",
 ];
@@ -104,6 +106,7 @@ const LANDING_PRIORITY: (typeof NAV_ITEMS)[number]["key"][] = [
   "finance",
   "reports",
   "employees",
+  "customers",
   "settings",
 ];
 

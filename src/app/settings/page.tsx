@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sun, Moon, Download, Upload, FileSpreadsheet, Trash2, Tag, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopLogo } from "@/components/layout/ShopLogo";
+import { MenuQrManager } from "@/components/settings/MenuQrManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -432,6 +433,8 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        <MenuQrManager />
 
         {/* Promo codes */}
         <Card>

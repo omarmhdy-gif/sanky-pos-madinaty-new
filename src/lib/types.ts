@@ -216,6 +216,7 @@ export type PermissionKey =
   | "reports"
   | "attendance"
   | "employees"
+  | "customers"
   | "settings"
   | "dashboard";
 
