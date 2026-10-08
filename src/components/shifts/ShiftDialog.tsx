@@ -14,7 +14,6 @@ import { useI18n, bilingual } from "@/lib/i18n";
 import { toast } from "@/components/ui/toast";
 import { formatMoney, formatNumber, formatDateTime } from "@/lib/utils";
 import { shiftSalesSplit, posOrders, talabatOrders } from "@/lib/analytics";
-import { externalPaymentName } from "@/lib/externalPayment";
 import { printShiftReport } from "@/lib/printing/printReceipt";
 import type { Shift } from "@/lib/types";
 
@@ -46,7 +45,7 @@ export function ShiftDialog({
   const [printing, setPrinting] = useState(false);
 
   const branchName = bilingual(branches.find((b) => b.id === currentBranchId)?.name ?? { en: "", ar: "" }, locale);
-  const externalName = bilingual(externalPaymentName(settings), locale);
+  const externalName = locale === "ar" ? "المدفوعات الخارجية" : "External payments";
 
   // Audit finding: an offline order queued while this shift was open still
   // carries this shift's id in its payload (captured at queue time), but if

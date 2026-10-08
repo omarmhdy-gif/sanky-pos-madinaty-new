@@ -23,7 +23,7 @@ import { DateFilterBar } from "@/components/shared/DateFilterBar";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useI18n, bilingual } from "@/lib/i18n";
-import { getExternalPaymentIcon, externalPaymentName } from "@/lib/externalPayment";
+import { externalPaymentLabel, getExternalPaymentIcon } from "@/lib/externalPayment";
 import { formatMoney, formatNumber, cn, isImageUrl } from "@/lib/utils";
 import {
   dateRangeForFilter,
@@ -38,6 +38,7 @@ import {
   paymentBreakdown,
   monthlySummary,
   talabatSummary,
+  talabatOrders,
   wasteSummary,
   productSalesReport,
   inventoryConsumptionSummary,
@@ -168,7 +169,8 @@ export default function ReportsPage() {
   const chartData = seriesForRange(posOrders(orders), range, locale);
   const top = topProducts(rangeOrdersAll, products, 100, locale);
   const catRevenue = revenueByCategory(rangeOrders, products, categories, locale);
-  const payments = paymentBreakdown(rangeOrders);
+  const externalPaymentOrders = ordersInDateRange(talabatOrders(orders), range);
+  const payments = paymentBreakdown([...rangeOrders, ...externalPaymentOrders]);
   const talabat = talabatSummary(orders, range);
   const waste = wasteSummary(orders, products, inventoryItems, range, locale);
   const productSales = productSalesReport(rangeOrders, products, inventoryItems, locale);
@@ -176,7 +178,7 @@ export default function ReportsPage() {
   const averageOrder = averageOrderSummary(rangeOrders, products, inventoryItems);
   const externalIconKey = settings.externalPaymentIcon;
   const ExternalIcon = getExternalPaymentIcon(externalIconKey);
-  const externalName = bilingual(externalPaymentName(settings), locale);
+  const externalName = locale === "ar" ? "المدفوعات الخارجية" : "External payments";
   const monthly = monthlySummary(orders, purchases, expenses);
   const monthOrders = nonWasteOrders(orders).filter((o) => isThisMonth(o.createdAt));
   const monthTopProducts = topProducts(monthOrders, products, 5, locale);
@@ -285,7 +287,7 @@ export default function ReportsPage() {
       o.discountAmount,
       o.taxAmount,
       o.total,
-      o.payment.method,
+      o.payment.method === "talabat" ? externalPaymentLabel(o.payment, settings, locale) : o.payment.method,
       o.cashierName,
       o.status,
     ]),
@@ -298,7 +300,7 @@ export default function ReportsPage() {
   ]);
   const exportPayments = () => downloadCsv(`sanky-payment-methods-${filter}.csv`, [
     ["Payment Method", "Total"],
-    ...payments.map((p) => [p.method, p.total]),
+    ...payments.map((p) => [p.method.startsWith("external:") ? externalPaymentLabel({ method: "talabat", externalMethodId: p.externalMethodId, externalMethodName: p.externalMethodName }, settings, locale) : p.method === "talabat" ? externalPaymentLabel({ method: "talabat" }, settings, locale) : p.method, p.total]),
   ]);
   const exportUsers = () => downloadCsv(`sanky-user-sales-${filter}.csv`, [
     ["User", "Orders", "Revenue", "Discounts", "Tax"],
@@ -423,7 +425,7 @@ export default function ReportsPage() {
           </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm"><thead><tr className="border-b text-xs text-muted-foreground"><th className="py-2 text-start">Order</th><th className="py-2 text-start">Date</th><th className="py-2 text-end">Subtotal</th><th className="py-2 text-end">Discount</th><th className="py-2 text-end">Tax</th><th className="py-2 text-end">Total</th><th className="py-2 text-start">Payment</th></tr></thead><tbody>
-              {(detailsExpanded ? rangeOrders : rangeOrders.slice(0, 10)).map((o) => <tr key={o.id} className="border-b border-border/50"><td className="py-2">#{o.orderNumber}</td><td className="py-2">{dateLabel(o.createdAt)}</td><td className="py-2 text-end">{formatMoney(o.subtotal, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.discountAmount, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.taxAmount, settings.currencySymbol)}</td><td className="py-2 text-end font-medium">{formatMoney(o.total, settings.currencySymbol)}</td><td className="py-2 capitalize">{o.payment.method}</td></tr>)}
+              {(detailsExpanded ? rangeOrders : rangeOrders.slice(0, 10)).map((o) => <tr key={o.id} className="border-b border-border/50"><td className="py-2">#{o.orderNumber}</td><td className="py-2">{dateLabel(o.createdAt)}</td><td className="py-2 text-end">{formatMoney(o.subtotal, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.discountAmount, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.taxAmount, settings.currencySymbol)}</td><td className="py-2 text-end font-medium">{formatMoney(o.total, settings.currencySymbol)}</td><td className="py-2 capitalize">{o.payment.method === "talabat" ? externalPaymentLabel(o.payment, settings, locale) : o.payment.method}</td></tr>)}
             </tbody></table>
           </div>
           {rangeOrders.length > 10 && <SeeMoreButton total={rangeOrders.length} expanded={detailsExpanded} onToggle={() => setDetailsExpanded((v) => !v)} />}
@@ -431,7 +433,7 @@ export default function ReportsPage() {
 
         <ReportSection title="Payment Method Report" icon={<WalletCards className="h-4 w-4" />} exportAction={exportPayments}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {payments.map((p) => <div key={p.method} className="rounded-xl border border-border p-4"><p className="text-xs capitalize text-muted-foreground">{p.method}</p><p className="mt-1 text-lg font-bold">{formatMoney(p.total, settings.currencySymbol)}</p></div>)}
+            {payments.map((p) => <div key={p.method} className="rounded-xl border border-border p-4"><p className="text-xs capitalize text-muted-foreground">{p.method.startsWith("external:") ? externalPaymentLabel({ method: "talabat", externalMethodId: p.externalMethodId, externalMethodName: p.externalMethodName }, settings, locale) : p.method === "talabat" ? externalPaymentLabel({ method: "talabat" }, settings, locale) : p.method}</p><p className="mt-1 text-lg font-bold">{formatMoney(p.total, settings.currencySymbol)}</p></div>)}
           </div>
         </ReportSection>
 

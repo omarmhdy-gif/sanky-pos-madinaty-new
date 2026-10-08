@@ -6,7 +6,7 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useDeviceSettingsStore } from "@/lib/store/useDeviceSettingsStore";
 import { formatMoney, formatDateTime } from "@/lib/utils";
-import { externalPaymentName } from "@/lib/externalPayment";
+import { externalPaymentLabel } from "@/lib/externalPayment";
 
 export function ReceiptView({ order }: { order: Order }) {
   const { t, locale } = useI18n();
@@ -96,7 +96,7 @@ export function ReceiptView({ order }: { order: Order }) {
       <div className="flex justify-between capitalize">
         <span>{t.pos.payment}</span>
         <span>
-          {order.payment.method === "talabat" ? bilingual(externalPaymentName(settings), locale) : order.payment.method}
+          {order.payment.method === "talabat" ? externalPaymentLabel(order.payment, settings, locale) : order.payment.method}
         </span>
       </div>
       {order.payment.tenderedAmount !== undefined && (

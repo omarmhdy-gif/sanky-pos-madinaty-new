@@ -1,7 +1,7 @@
 import type { Order, ShopSettings, Shift } from "@/lib/types";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import { bilingual } from "@/lib/i18n";
-import { externalPaymentName } from "@/lib/externalPayment";
+import { externalPaymentLabel } from "@/lib/externalPayment";
 
 /** Printed/human label for a payment method — "talabat" specifically needs
  * this rather than the raw stored string, per explicit requirement (the
@@ -9,8 +9,9 @@ import { externalPaymentName } from "@/lib/externalPayment";
  * `capitalize`, but ESC/POS text has no such thing — it's raw bytes).
  * `externalName` is the branch's configured display name (Talabat by
  * default) — the stored payment.method value itself never changes. */
-function paymentMethodLabel(method: string, externalName: string): string {
-  if (method === "talabat") return externalName;
+function paymentMethodLabel(order: Order, settings: ShopSettings, locale: "en" | "ar"): string {
+  const method = order.payment.method;
+  if (method === "talabat") return externalPaymentLabel(order.payment, settings, locale);
   if (method === "waste") return "Waste";
   return method.charAt(0).toUpperCase() + method.slice(1);
 }
@@ -59,7 +60,6 @@ export function buildReceiptBytes(order: Order, settings: ShopSettings, branchNa
   const center = () => bytes.push(ESC, 0x61, 1);
   const left = () => bytes.push(ESC, 0x61, 0);
   const bold = (on: boolean) => bytes.push(ESC, 0x45, on ? 1 : 0);
-  const externalName = bilingual(externalPaymentName(settings), locale);
 
   bytes.push(ESC, 0x40); // initialize printer
   bytes.push(FS, 0x2e); // FS . — cancel Kanji/double-byte character mode
@@ -89,7 +89,7 @@ export function buildReceiptBytes(order: Order, settings: ShopSettings, branchNa
   bold(true);
   line(`Total: ${formatMoney(order.total, settings.currencySymbol)}`);
   bold(false);
-  line(`Payment: ${paymentMethodLabel(order.payment.method, externalName)}`);
+  line(`Payment: ${paymentMethodLabel(order, settings, locale)}`);
   if (order.payment.tenderedAmount !== undefined) {
     line(`Cash Received: ${formatMoney(order.payment.tenderedAmount, settings.currencySymbol)}`);
   }
@@ -119,7 +119,7 @@ export function buildShiftReportBytes(shift: Shift, settings: ShopSettings, bran
   const center = () => bytes.push(ESC, 0x61, 1);
   const left = () => bytes.push(ESC, 0x61, 0);
   const bold = (on: boolean) => bytes.push(ESC, 0x45, on ? 1 : 0);
-  const externalName = bilingual(externalPaymentName(settings), locale);
+  const externalName = locale === "ar" ? "المدفوعات الخارجية" : "External payments";
 
   bytes.push(ESC, 0x40); // initialize printer
   bytes.push(FS, 0x2e); // FS . — cancel Kanji/double-byte character mode

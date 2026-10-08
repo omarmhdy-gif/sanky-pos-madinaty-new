@@ -5,6 +5,7 @@ import { Sun, Moon, Download, Upload, FileSpreadsheet, Trash2, Tag, Plus, Search
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopLogo } from "@/components/layout/ShopLogo";
 import { MenuQrManager } from "@/components/settings/MenuQrManager";
+import { ExternalPaymentManager } from "@/components/settings/ExternalPaymentManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,12 +41,6 @@ import {
 } from "@/lib/supabase/api";
 import { exportAllToCsv } from "@/lib/export";
 import { APP_VERSION, BUILD_LABEL } from "@/lib/version";
-import {
-  EXTERNAL_PAYMENT_ICON_KEYS,
-  DEFAULT_EXTERNAL_PAYMENT_NAME,
-  DEFAULT_EXTERNAL_PAYMENT_ICON,
-  getExternalPaymentIcon,
-} from "@/lib/externalPayment";
 import type { Customer, LoyaltySettings, MultiPricingSettings, PromoCode } from "@/lib/types";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
@@ -86,10 +81,6 @@ export default function SettingsPage() {
   const pendingOfflineOrders = useOrderQueueStore((s) => s.queue.length);
 
   const multiPricing = settings.multiPricing ?? DEFAULT_MULTI_PRICING;
-  const externalName =
-    settings.externalPaymentName ?? DEFAULT_EXTERNAL_PAYMENT_NAME;
-  const externalIconKey =
-    settings.externalPaymentIcon ?? DEFAULT_EXTERNAL_PAYMENT_ICON;
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -975,86 +966,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* External Payment */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.settings.externalPayment}</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              {t.settings.externalPaymentDesc}
-            </p>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label>{t.settings.externalPaymentNameEn}</Label>
-
-                <Input
-                  className="mt-1.5"
-                  value={externalName.en}
-                  onChange={(e) =>
-                    updateSettings({
-                      externalPaymentName: {
-                        ...externalName,
-                        en: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>{t.settings.externalPaymentNameAr}</Label>
-
-                <Input
-                  className="mt-1.5"
-                  dir="rtl"
-                  value={externalName.ar}
-                  onChange={(e) =>
-                    updateSettings({
-                      externalPaymentName: {
-                        ...externalName,
-                        ar: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>{t.settings.externalPaymentIcon}</Label>
-
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {EXTERNAL_PAYMENT_ICON_KEYS.map((key) => {
-                  const Icon = getExternalPaymentIcon(key);
-
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() =>
-                        updateSettings({
-                          externalPaymentIcon: key,
-                        })
-                      }
-                      className={cn(
-                        "flex h-11 w-11 items-center justify-center rounded-lg border",
-                        externalIconKey === key
-                          ? "border-primary bg-primary/10"
-                          : "border-border"
-                      )}
-                      title={key}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <ExternalPaymentManager />
 
         {/* Data Management */}
         <Card>

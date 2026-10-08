@@ -28,6 +28,7 @@ import { formatMoney, formatNumber } from "@/lib/utils";
 import {
   getExternalPaymentIcon,
   externalPaymentName,
+  externalPaymentMethodById,
 } from "@/lib/externalPayment";
 
 import {
@@ -332,10 +333,7 @@ export default function DashboardPage() {
     settings.externalPaymentIcon
   );
 
-  const externalName = bilingual(
-    externalPaymentName(settings),
-    locale
-  );
+  const externalName = locale === "ar" ? "المدفوعات الخارجية" : "External payments";
 
   return (
     <AppShell title={t.dashboard.title}>
@@ -596,17 +594,19 @@ export default function DashboardPage() {
                 </p>
               ) : (
                 paymentSummary.map((p) => {
+                  const configuredExternal = externalPaymentMethodById(settings, p.externalMethodId);
+                  const isExternalMethod = p.method === "talabat" || p.method.startsWith("external:");
                   const Icon =
-                    p.method === "talabat"
-                      ? ExternalIcon
+                    isExternalMethod
+                      ? getExternalPaymentIcon(configuredExternal?.icon ?? settings.externalPaymentIcon)
                       : p.method === "waste"
                         ? Trash2
                         : PAYMENT_ICONS[p.method] ??
                           DollarSign;
 
                   const label =
-                    p.method === "talabat"
-                      ? externalName
+                    isExternalMethod
+                      ? bilingual(p.externalMethodName ?? configuredExternal?.name ?? externalPaymentName(settings), locale)
                       : p.method === "waste"
                         ? t.pos.waste
                         : p.method === "cash"

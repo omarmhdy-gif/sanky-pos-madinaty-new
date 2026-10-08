@@ -333,6 +333,7 @@ export function fromSettingsRow(row: any): ShopSettings {
     multiPricing: row.multi_pricing ?? undefined,
     externalPaymentName: row.external_payment_name ?? undefined,
     externalPaymentIcon: row.external_payment_icon ?? undefined,
+    externalPaymentMethods: row.external_payment_methods ?? undefined,
   };
 }
 
@@ -353,6 +354,7 @@ export function toSettingsPatchRow(patch: Partial<ShopSettings>) {
   if (patch.multiPricing !== undefined) row.multi_pricing = patch.multiPricing;
   if (patch.externalPaymentName !== undefined) row.external_payment_name = patch.externalPaymentName;
   if (patch.externalPaymentIcon !== undefined) row.external_payment_icon = patch.externalPaymentIcon;
+  if (patch.externalPaymentMethods !== undefined) row.external_payment_methods = patch.externalPaymentMethods;
   return row;
 }
 

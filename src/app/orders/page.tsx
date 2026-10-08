@@ -14,7 +14,7 @@ import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, formatNumber, formatDateTime, cn } from "@/lib/utils";
 import { dateRangeForFilter, type DateFilterKey } from "@/lib/analytics";
 import { hasPermission } from "@/lib/permissions";
-import { getExternalPaymentIcon, externalPaymentName } from "@/lib/externalPayment";
+import { externalPaymentLabel, externalPaymentMethodById, getExternalPaymentIcon } from "@/lib/externalPayment";
 import type { Order, PaymentMethod } from "@/lib/types";
 
 const PAYMENT_FILTERS: (PaymentMethod | "all")[] = ["all", "cash", "card", "split", "talabat", "waste"];
@@ -31,7 +31,6 @@ export default function OrdersPage() {
   // method/items always stay visible regardless.
   const canSeeTotals = hasPermission(currentUser, "reports") || hasPermission(currentUser, "finance");
   const ExternalIcon = getExternalPaymentIcon(settings.externalPaymentIcon);
-  const externalName = bilingual(externalPaymentName(settings), locale);
   const paymentIcons = { cash: Banknote, card: CreditCard, wallet: Wallet, split: Split, talabat: ExternalIcon, waste: Trash2 };
 
   const [filter, setFilter] = useState<DateFilterKey>("today");
@@ -154,7 +153,7 @@ export default function OrdersPage() {
                 paymentFilter === m ? "border-primary bg-primary text-primary-foreground" : "border-border"
               )}
             >
-              {m === "all" ? t.orders.filterAll : m === "talabat" ? externalName : m === "waste" ? t.pos.waste : t.pos[m]}
+              {m === "all" ? t.orders.filterAll : m === "talabat" ? (locale === "ar" ? "الدفع الخارجي" : "External payments") : m === "waste" ? t.pos.waste : t.pos[m]}
             </button>
           ))}
         </div>
@@ -175,7 +174,10 @@ export default function OrdersPage() {
           <div className="overflow-hidden rounded-xl border border-border">
             <div className="divide-y divide-border">
               {filteredOrders.map((order) => {
-                const Icon = paymentIcons[order.payment.method];
+                const externalMethod = externalPaymentMethodById(settings, order.payment.externalMethodId);
+                const Icon = order.payment.method === "talabat"
+                  ? getExternalPaymentIcon(externalMethod?.icon ?? order.payment.externalMethodIcon ?? settings.externalPaymentIcon)
+                  : paymentIcons[order.payment.method];
                 return (
                   <button
                     key={order.id}
@@ -202,7 +204,7 @@ export default function OrdersPage() {
                       {order.payment.method === "talabat" && (
                         <Badge className="border-[#FF5A00]/40 bg-[#FF5A00]/10 text-[#FF5A00]" variant="outline">
                           <ExternalIcon className="h-3 w-3" />
-                          {externalName}
+                          {externalPaymentLabel(order.payment, settings, locale)}
                         </Badge>
                       )}
                       {order.payment.method === "waste" && (

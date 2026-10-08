@@ -126,7 +126,7 @@ interface DataStore extends AppData {
   updateStaff: (id: string, patch: Partial<StaffUser> & { pin?: string }) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
   // Settings
-  updateSettings: (patch: Partial<ShopSettings>) => Promise<void>;
+  updateSettings: (patch: Partial<ShopSettings>) => Promise<boolean>;
 }
 
 const EMPTY_SETTINGS: ShopSettings = {
@@ -528,9 +528,11 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     try {
       const updated = await api.updateSettings(requireBranchId(), patch);
       set({ settings: updated });
+      return true;
     } catch (err) {
       set({ settings: previous });
       toast(errorMessage(err, "Failed to update settings"), "error");
+      return false;
     }
   },
 }));

@@ -481,15 +481,25 @@ export function monthlySummary(orders: Order[], purchases: Purchase[], expenses:
 }
 
 export function paymentBreakdown(orders: Order[]) {
-  const map = new Map<string, { total: number; count: number }>();
+  const map = new Map<string, { total: number; count: number; externalMethodId?: string; externalMethodName?: { en: string; ar: string } }>();
   completedOrders(orders).forEach((o) => {
-    const existing = map.get(o.payment.method) ?? { total: 0, count: 0 };
+    const isNamedExternal = o.payment.method === "talabat" && Boolean(o.payment.externalMethodId);
+    const methodKey = isNamedExternal ? `external:${o.payment.externalMethodId}` : o.payment.method;
+    const existing = map.get(methodKey) ?? {
+      total: 0,
+      count: 0,
+      externalMethodId: isNamedExternal ? o.payment.externalMethodId : undefined,
+      externalMethodName: isNamedExternal ? o.payment.externalMethodName : undefined,
+    };
     existing.total += o.total;
     existing.count += 1;
-    map.set(o.payment.method, existing);
+    if (isNamedExternal && !existing.externalMethodName) existing.externalMethodName = o.payment.externalMethodName;
+    map.set(methodKey, existing);
   });
   return Array.from(map.entries()).map(([method, stats]) => ({
     method,
+    externalMethodId: stats.externalMethodId,
+    externalMethodName: stats.externalMethodName,
     total: Math.round(stats.total * 100) / 100,
     count: stats.count,
   }));

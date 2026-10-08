@@ -103,6 +103,11 @@ export interface OrderPayment {
   tenderedAmount?: number; // for cash
   changeDue?: number;
   splitParts?: SplitPaymentPart[];
+  /** External method metadata; `method` remains "talabat" so shift closing
+   * continues to exclude marketplace orders from cash/card reconciliation. */
+  externalMethodId?: string;
+  externalMethodName?: { en: string; ar: string };
+  externalMethodIcon?: string;
 }
 export interface Customer {
   id: string;
@@ -372,6 +377,13 @@ export interface ShopSettings {
    * default, so this should always be present once applied). */
   externalPaymentName?: { en: string; ar: string };
   externalPaymentIcon?: string;
+  externalPaymentMethods?: ExternalPaymentMethod[];
+}
+
+export interface ExternalPaymentMethod {
+  id: string;
+  name: { en: string; ar: string };
+  icon: string;
 }
 
 /** A roster of employees clocking in/out for attendance — entirely separate

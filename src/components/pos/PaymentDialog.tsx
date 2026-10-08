@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Banknote, CreditCard, CheckCircle2, Printer, Plus, Split, CloudOff, Trash2, Search, UserRound, Phone, Gift } from "lucide-react";
-import { getExternalPaymentIcon, externalPaymentName } from "@/lib/externalPayment";
+import { externalPaymentMethods, getExternalPaymentIcon } from "@/lib/externalPayment";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCartStore, lineTotal, computeDiscountAmount } from "@/lib/store/useCartStore";
@@ -16,7 +16,7 @@ import { isLikelyNetworkFailure } from "@/lib/network";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
-import type { Customer, LoyaltySettings, Order, PaymentMethod, SplitPaymentPart } from "@/lib/types";
+import type { Customer, ExternalPaymentMethod, LoyaltySettings, Order, PaymentMethod, SplitPaymentPart } from "@/lib/types";
 import { createCustomer, searchCustomers, refreshCustomerLoyalty, fetchLoyaltySettings } from "@/lib/supabase/api";
 import { supabase } from "@/lib/supabase/client";
 import { ReceiptView } from "@/components/pos/ReceiptView";
@@ -55,8 +55,7 @@ export function PaymentDialog({
   const openShift = currentUser
     ? shifts.find((s) => s.cashierId === currentUser.id && s.status === "open")
     : undefined;
-  const ExternalIcon = getExternalPaymentIcon(settings.externalPaymentIcon);
-  const externalName = bilingual(externalPaymentName(settings), locale);
+  const externalMethods = externalPaymentMethods(settings);
 
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [tendered, setTendered] = useState<number | null>(null);
@@ -308,7 +307,8 @@ export function PaymentDialog({
     paymentMethod: PaymentMethod,
     tenderedAmount?: number,
     splitParts?: SplitPaymentPart[],
-    wasteReasonText?: string
+    wasteReasonText?: string,
+    externalMethod?: ExternalPaymentMethod
   ) => {
     if (cart.promoCode && (!cart.customerId || selectedCustomer?.id !== cart.customerId)) {
       setCheckoutStep("customer");
@@ -332,6 +332,9 @@ export function PaymentDialog({
         tenderedAmount,
         changeDue: tenderedAmount ? Math.max(0, tenderedAmount - total) : undefined,
         splitParts,
+        externalMethodId: externalMethod?.id,
+        externalMethodName: externalMethod?.name,
+        externalMethodIcon: externalMethod?.icon,
       },
       status: "completed" as const,
       type: cart.orderType,
@@ -621,20 +624,19 @@ export function PaymentDialog({
                   label={t.pos.split}
                   onClick={() => setMethod("split")}
                 />
-                {/* The configurable external-marketplace payment method
-                    (Talabat by default, per-branch renamable in Settings) —
-                    not a real till payment, charges immediately like Card
-                    (no tendered/change flow, no drawer kick), but is
-                    tracked completely separately everywhere else (see
-                    lib/analytics.ts). The stored payment.method value stays
-                    the literal "talabat" regardless of the display name. */}
-                <PaymentMethodButton
-                  icon={ExternalIcon}
-                  label={externalName}
-                  disabled={submitting}
-                  iconClassName="text-[#FF5A00]"
-                  onClick={() => finalizeOrder("talabat")}
-                />
+                {externalMethods.map((externalMethod) => {
+                  const ExternalIcon = getExternalPaymentIcon(externalMethod.icon);
+                  return (
+                    <PaymentMethodButton
+                      key={externalMethod.id}
+                      icon={ExternalIcon}
+                      label={bilingual(externalMethod.name, locale)}
+                      disabled={submitting}
+                      iconClassName="text-[#FF5A00]"
+                      onClick={() => finalizeOrder("talabat", undefined, undefined, undefined, externalMethod)}
+                    />
+                  );
+                })}
                 {/* Waste represents discarded product, not revenue — no
                     payment is collected, a reason is mandatory instead (see
                     the method === "waste" branch below). */}

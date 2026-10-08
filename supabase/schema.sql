@@ -62,7 +62,10 @@ create table shop_settings (
   theme text not null default 'light',
   receipt_footer jsonb,
   address text,
-  phone text
+  phone text,
+  external_payment_name jsonb not null default '{"en":"Talabat","ar":"طلبات"}'::jsonb,
+  external_payment_icon text not null default 'Bike',
+  external_payment_methods jsonb not null default '[{"id":"talabat","name":{"en":"Talabat","ar":"طلبات"},"icon":"Bike"}]'::jsonb
 );
 
 create table staff (
