@@ -6,7 +6,6 @@ import { useI18n } from "@/lib/i18n";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { NAV_ITEMS, canAccess } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import { ShopLogo } from "@/components/layout/ShopLogo";
 
 export function Sidebar({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
@@ -16,9 +15,25 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
 
   return (
     <aside id="app-sidebar" className={cn("sanky-sidebar hidden shrink-0 flex-col border-e border-white/10 transition-[width] duration-200 md:flex md:w-[4.5rem]", collapsed ? "lg:w-[4.5rem]" : "lg:w-56")}>
-      <div className="flex h-[4.5rem] items-center gap-3 px-3 lg:px-4 border-b border-white/10">
-        <ShopLogo className="h-10 w-10 shrink-0 rounded-xl ring-1 ring-white/15" />
-        {!collapsed && <span className="hidden lg:block font-semibold text-sm tracking-wide truncate">{t.app.name}</span>}
+      <div className="flex h-20 items-center gap-3 border-b border-white/10 px-3 lg:px-4">
+        <img
+          src="/sanky-brand-mark.png"
+          alt="SANKY"
+          className="h-10 w-10 shrink-0 rounded-xl bg-[#f6eddc] p-1 object-contain lg:hidden"
+        />
+        {!collapsed ? (
+          <img
+            src="/sanky-brand-lockup.png"
+            alt="SANKY"
+            className="hidden h-16 min-w-0 flex-1 rounded-xl bg-[#f6eddc] px-2 object-contain object-left lg:block"
+          />
+        ) : (
+          <img
+            src="/sanky-brand-mark.png"
+            alt="SANKY"
+            className="hidden h-10 w-10 shrink-0 rounded-xl bg-[#f6eddc] p-1 object-contain lg:block"
+          />
+        )}
       </div>
 
       <nav className="flex flex-1 flex-col gap-1.5 p-2.5">

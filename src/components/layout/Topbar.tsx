@@ -58,6 +58,7 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
         >
           {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
         </Button>
+        <img src="/sanky-brand-mark.png" alt="SANKY" className="h-8 w-8 shrink-0 rounded-lg bg-[#f6eddc] p-0.5 object-contain md:hidden" />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold leading-tight tracking-tight">{title}</h1>
           {now && (

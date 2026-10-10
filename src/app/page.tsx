@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { defaultRouteFor } from "@/lib/permissions";
+import { BrandSplash } from "@/components/layout/BrandSplash";
 
 export default function RootPage() {
   const router = useRouter();
@@ -22,9 +23,5 @@ export default function RootPage() {
     }
   }, [currentBranchId, isAuthenticated, currentUser, router]);
 
-  return (
-    <div className="flex h-app w-full items-center justify-center bg-background">
-      <p className="animate-fade-in text-sm text-muted-foreground">Loading Sanky POS...</p>
-    </div>
-  );
+  return <BrandSplash />;
 }

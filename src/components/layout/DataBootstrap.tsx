@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
-import { ShopLogo } from "@/components/layout/ShopLogo";
+import { BrandSplash } from "@/components/layout/BrandSplash";
 
 // Loads branches on mount (needed even before login, for Branch Select), then
 // loads that branch's data once one is chosen. Renders a splash screen while
@@ -53,12 +53,7 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
   const stillLoading = !branchesLoaded || (currentBranchId !== null && !dataLoaded);
 
   if (stillLoading) {
-    return (
-      <div className="flex h-app w-full flex-col items-center justify-center gap-3 bg-background">
-        <ShopLogo className="h-12 w-12 rounded-xl animate-pulse" />
-        <p className="text-sm text-muted-foreground">Connecting…</p>
-      </div>
-    );
+    return <BrandSplash />;
   }
 
   return <>{children}</>;

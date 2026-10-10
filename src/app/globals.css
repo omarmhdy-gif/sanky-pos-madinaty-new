@@ -167,6 +167,114 @@
     color: hsl(42 29% 93%);
   }
 
+  .sanky-splash {
+    position: relative;
+    isolation: isolate;
+    background:
+      radial-gradient(ellipse at 50% 44%, hsl(42 45% 91% / 0.92), transparent 48%),
+      linear-gradient(145deg, hsl(40 35% 97%), hsl(34 42% 91%));
+  }
+
+  .dark .sanky-splash {
+    background:
+      radial-gradient(ellipse at 50% 44%, hsl(30 26% 18% / 0.9), transparent 48%),
+      linear-gradient(145deg, hsl(24 20% 11%), hsl(20 25% 7%));
+  }
+
+  .sanky-splash-orb {
+    position: absolute;
+    z-index: -1;
+    width: min(68vw, 28rem);
+    aspect-ratio: 1;
+    border-radius: 9999px;
+    background: hsl(42 70% 56% / 0.12);
+    filter: blur(72px);
+    animation: sanky-orb-breathe 3.2s ease-in-out infinite;
+  }
+
+  .sanky-splash-mark {
+    position: relative;
+    display: grid;
+    width: 8.5rem;
+    aspect-ratio: 1;
+    place-items: center;
+    border-radius: 9999px;
+    background: linear-gradient(145deg, hsl(151 30% 22%), hsl(153 30% 13%));
+    box-shadow: 0 18px 55px hsl(151 35% 12% / 0.24), inset 0 0 0 1px hsl(42 70% 78% / 0.24);
+    animation: sanky-mark-arrive 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .sanky-splash-ring {
+    position: absolute;
+    inset: -0.6rem;
+    border: 1px solid hsl(38 55% 53% / 0.24);
+    border-radius: inherit;
+  }
+
+  .sanky-splash-ring-outer {
+    border-top-color: hsl(38 68% 54% / 0.95);
+    animation: sanky-ring-spin 1.8s linear infinite;
+  }
+
+  .sanky-splash-ring-inner {
+    inset: -0.28rem;
+    border-color: hsl(38 55% 53% / 0.14);
+  }
+
+  .sanky-splash-wordmark {
+    border-radius: 1rem;
+    background: hsl(40 48% 96% / 0.92);
+    padding: 0.35rem 0.75rem;
+    box-shadow: 0 10px 35px hsl(24 28% 25% / 0.08);
+    animation: sanky-mark-arrive 850ms 100ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .sanky-splash-track {
+    width: 7rem;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: hsl(34 20% 60% / 0.22);
+  }
+
+  .sanky-splash-track span {
+    display: block;
+    width: 42%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(38 55% 50%), hsl(44 78% 67%));
+    animation: sanky-progress 1.4s ease-in-out infinite;
+  }
+
+  @keyframes sanky-ring-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes sanky-progress {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(340%); }
+  }
+
+  @keyframes sanky-orb-breathe {
+    0%, 100% { opacity: 0.55; transform: scale(0.92); }
+    50% { opacity: 1; transform: scale(1.06); }
+  }
+
+  @keyframes sanky-mark-arrive {
+    from { opacity: 0; transform: translateY(8px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .sanky-splash-orb,
+    .sanky-splash-mark,
+    .sanky-splash-ring-outer,
+    .sanky-splash-wordmark,
+    .sanky-splash-track span {
+      animation: none;
+    }
+  }
+
   .sanky-app {
     background:
       radial-gradient(ellipse at 12% 0%, hsl(var(--accent) / 0.3), transparent 36%),
