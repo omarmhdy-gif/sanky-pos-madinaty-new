@@ -2,18 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Moon, Sun, Languages, LogOut, Building2, Wallet, Repeat, Check, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Moon, Sun, Languages, LogOut, Building2, Repeat, Check, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useCartStore } from "@/lib/store/useCartStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
-import { useDataStore } from "@/lib/store/useDataStore";
-import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
 import { Button } from "@/components/ui/button";
-import { ShiftDialog } from "@/components/shifts/ShiftDialog";
-import { StaffAttendanceButton } from "@/components/attendance/StaffAttendanceButton";
 import { cn } from "@/lib/utils";
 
 export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: string; sidebarCollapsed: boolean; onToggleSidebar: () => void }) {
@@ -25,16 +21,8 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
   const branches = useBranchStore((s) => s.branches);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const setBranch = useBranchStore((s) => s.setBranch);
-  const shifts = useDataStore((s) => s.shifts);
-  const openStartShift = useShiftUIStore((s) => s.openStartShift);
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
-  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
-  const [exitAfterShift, setExitAfterShift] = useState<"logout" | "branch" | null>(null);
-
-  const openShift = currentUser
-    ? shifts.find((s) => s.cashierId === currentUser.id && s.status === "open") ?? null
-    : null;
 
   useEffect(() => {
     setNow(new Date());
@@ -43,22 +31,12 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
   }, []);
 
   const handleLogout = () => {
-    if (openShift) {
-      setExitAfterShift("logout");
-      setShiftDialogOpen(true);
-      return;
-    }
     logout();
     clearCart();
     router.replace("/login");
   };
 
   const handleSwitchBranch = () => {
-    if (openShift) {
-      setExitAfterShift("branch");
-      setShiftDialogOpen(true);
-      return;
-    }
     logout();
     clearCart();
     clearBranch();
@@ -100,26 +78,6 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
       </div>
 
       <div className="flex items-center gap-2">
-        <StaffAttendanceButton />
-        {openShift ? (
-          <button
-            onClick={() => setShiftDialogOpen(true)}
-            className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success"
-          >
-            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-            {t.shifts.shiftOpen}
-          </button>
-        ) : (
-          currentUser && (
-            <button
-              onClick={() => openStartShift()}
-              className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent"
-            >
-              <Wallet className="h-3.5 w-3.5" />
-              {t.shifts.startShift}
-            </button>
-          )
-        )}
         {/* Owner-only, instant branch switch — distinct from the "Switch
             Branch" menu item below, which fully logs out and re-prompts for
             a PIN. This one keeps the owner authenticated and just changes
@@ -215,24 +173,6 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
         </DropdownMenu.Root>
       </div>
 
-      <ShiftDialog
-        shift={openShift}
-        open={shiftDialogOpen}
-        onOpenChange={setShiftDialogOpen}
-        onFinished={() => {
-          if (exitAfterShift === "logout") {
-            logout();
-            clearCart();
-            router.replace("/login");
-          } else if (exitAfterShift === "branch") {
-            logout();
-            clearCart();
-            clearBranch();
-            router.replace("/branch-select");
-          }
-          setExitAfterShift(null);
-        }}
-      />
     </header>
   );
 }

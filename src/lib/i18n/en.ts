@@ -570,6 +570,8 @@ const en = {
     overtime: "Overtime",
     checkedIn: "Checked in",
     checkedOut: "Checked out",
+    requiredForSaleTitle: "Clock in to continue checkout",
+    requiredForSaleDesc: "Clock in from the POS to continue with this sale.",
   },
   settings: {
     title: "Settings",

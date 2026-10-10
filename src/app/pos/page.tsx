@@ -13,7 +13,6 @@ import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useCartStore } from "@/lib/store/useCartStore";
 import { useI18n } from "@/lib/i18n";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
-import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
 import { toast } from "@/components/ui/toast";
 import type { Product } from "@/lib/types";
 import { ShoppingBag } from "lucide-react";
@@ -21,27 +20,35 @@ import { Button } from "@/components/ui/button";
 import { StartupValidation } from "@/components/pos/StartupValidation";
 import { InventoryQualityCheckDialog } from "@/components/pos/InventoryQualityCheckDialog";
 import { ClipboardCheck } from "lucide-react";
+import { Wallet } from "lucide-react";
+import { StartShiftDialog } from "@/components/shifts/StartShiftDialog";
+import { ShiftDialog } from "@/components/shifts/ShiftDialog";
+import { StaffAttendanceButton } from "@/components/attendance/StaffAttendanceButton";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function PosPage() {
   const { t, locale } = useI18n();
   const products = useDataStore((s) => s.products);
   const categories = useDataStore((s) => s.categories);
   const shifts = useDataStore((s) => s.shifts);
+  const attendance = useDataStore((s) => s.attendance);
   const currentUser = useAuthStore((s) => s.currentUser);
   const addLine = useCartStore((s) => s.addLine);
   const cartLines = useCartStore((s) => s.lines);
-  const openStartShift = useShiftUIStore((s) => s.openStartShift);
 
   // Browsing/scanning/building a cart never requires a shift — only
   // charging does (gated in handleCharge below). Closing a shift no longer
-  // forces an immediate reopen; the user opens one again whenever they
-  // choose, via the Topbar's "Open Shift" button or by trying to charge.
+  // forces an immediate reopen; the user opens one from POS when needed.
   // Deliberately role-agnostic (not "only cashiers need a shift"): POS is
   // now reachable by anyone granted the "pos" permission, including an
   // owner — every order still needs a real shift_id (see create_order),
   // so charging without one would silently produce an order no shift
   // report can ever reconcile (see the shift-accuracy audit findings).
   const needsShift = !shifts.some((s) => s.cashierId === currentUser?.id && s.status === "open");
+  const openShift = shifts.find((s) => s.cashierId === currentUser?.id && s.status === "open") ?? null;
+  const hasOpenAttendance = attendance.some(
+    (record) => record.shiftKey === "staff" && record.employeeId === currentUser?.id && !record.checkOutAt
+  );
 
   const [activeCategory, setActiveCategory] = useState("all");
   const [search, setSearch] = useState("");
@@ -51,6 +58,10 @@ export default function PosPage() {
   const [heldOpen, setHeldOpen] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [inventoryCheckOpen, setInventoryCheckOpen] = useState(false);
+  const [startShiftOpen, setStartShiftOpen] = useState(false);
+  const [startShiftRequired, setStartShiftRequired] = useState(false);
+  const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
+  const [attendancePromptOpen, setAttendancePromptOpen] = useState(false);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.isActive);
@@ -107,7 +118,12 @@ export default function PosPage() {
 
   const handleCharge = () => {
     if (needsShift) {
-      openStartShift();
+      setStartShiftRequired(true);
+      setStartShiftOpen(true);
+      return;
+    }
+    if (!hasOpenAttendance) {
+      setAttendancePromptOpen(true);
       return;
     }
     setPaymentOpen(true);
@@ -121,7 +137,27 @@ export default function PosPage() {
       <div className="flex h-full min-h-0">
         {/* Product browsing area */}
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex justify-end border-b border-border px-3 py-2">
+          <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+            <div className="flex items-center gap-2">
+              <StaffAttendanceButton />
+              {openShift ? (
+                <>
+                  <span className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
+                    {t.shifts.shiftOpen}
+                  </span>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => setShiftDialogOpen(true)}>
+                    <Wallet className="h-4 w-4" />
+                    {t.shifts.closeShift}
+                  </Button>
+                </>
+              ) : (
+                <Button variant="outline" size="sm" className="gap-2" onClick={() => { setStartShiftRequired(false); setStartShiftOpen(true); }}>
+                  <Wallet className="h-4 w-4" />
+                  {t.shifts.startShift}
+                </Button>
+              )}
+            </div>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setInventoryCheckOpen(true)}>
               <ClipboardCheck className="h-4 w-4" />
               {locale === "ar" ? "فحص مواد المخزون" : "Check inventory"}
@@ -184,6 +220,31 @@ export default function PosPage() {
       <PaymentDialog open={paymentOpen} onOpenChange={setPaymentOpen} onOrderComplete={() => setSearch("")} />
       <HeldOrdersDialog open={heldOpen} onOpenChange={setHeldOpen} />
       <InventoryQualityCheckDialog open={inventoryCheckOpen} onOpenChange={setInventoryCheckOpen} />
+      <StartShiftDialog
+        open={startShiftOpen}
+        required={startShiftRequired}
+        onOpenChange={(open) => {
+          setStartShiftOpen(open);
+          if (!open) setStartShiftRequired(false);
+        }}
+      />
+      <ShiftDialog shift={openShift} open={shiftDialogOpen} onOpenChange={setShiftDialogOpen} />
+      <Dialog open={attendancePromptOpen} onOpenChange={(nextOpen) => { if (nextOpen) setAttendancePromptOpen(true); }}>
+        <DialogContent hideClose className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t.attendance.requiredForSaleTitle}</DialogTitle>
+            <DialogDescription>{t.attendance.requiredForSaleDesc}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <StaffAttendanceButton
+              onCheckedIn={() => {
+                setAttendancePromptOpen(false);
+                setPaymentOpen(true);
+              }}
+            />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

@@ -570,6 +570,8 @@ const ar = {
     overtime: "الوقت الإضافي",
     checkedIn: "تم تسجيل الحضور",
     checkedOut: "تم تسجيل الانصراف",
+    requiredForSaleTitle: "سجّل حضورك لإتمام البيع",
+    requiredForSaleDesc: "سجّل حضورك داخل نقطة البيع قبل متابعة الدفع.",
   },
   settings: {
     title: "الإعدادات",

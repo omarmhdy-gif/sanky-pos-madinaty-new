@@ -13,7 +13,7 @@ function timeOfDay(date: Date) {
   return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
-export function StaffAttendanceButton() {
+export function StaffAttendanceButton({ onCheckedIn }: { onCheckedIn?: () => void }) {
   const { t } = useI18n();
   const user = useAuthStore((s) => s.currentUser);
   const branchId = useBranchStore((s) => s.currentBranchId);
@@ -40,6 +40,7 @@ export function StaffAttendanceButton() {
         // the punch time as the official start and end-of-day as its boundary.
         await checkInAttendance("staff", time, "23:59", user.id, user.name, 0);
         toast(t.attendance.checkedIn, "success");
+        onCheckedIn?.();
       }
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to save attendance", "error");

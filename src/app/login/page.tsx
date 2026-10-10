@@ -4,8 +4,6 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Delete, Moon, Sun, Languages } from "lucide-react";
 import { useAuthStore } from "@/lib/store/useAuthStore";
-import { useDataStore } from "@/lib/store/useDataStore";
-import { useShiftUIStore } from "@/lib/store/useShiftUIStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { authenticateStaffPin } from "@/lib/supabase/api";
 import { canAccess, defaultRouteFor } from "@/lib/permissions";
@@ -19,7 +17,6 @@ import { cn } from "@/lib/utils";
 export default function LoginPage() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const openStartShift = useShiftUIStore((s) => s.openStartShift);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const { t, locale, setLocale } = useI18n();
   const { theme, toggleTheme } = useTheme();
@@ -49,10 +46,6 @@ export default function LoginPage() {
       if (user) {
         authenticated = true;
         login(user);
-        const hasOpenTill = useDataStore.getState().shifts.some(
-          (shift) => shift.cashierId === user.id && shift.status === "open"
-        );
-        if (!hasOpenTill) openStartShift(true);
         setWelcomeName(user.name);
         let returnPath: string | null = null;
         try {
