@@ -20,6 +20,7 @@ import { toast } from "@/components/ui/toast";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { cacheShopLogo } from "@/lib/store/shopLogoCache";
+import { loadPosSnapshot, savePosSnapshot } from "@/lib/store/offlineSnapshot";
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -57,7 +58,7 @@ async function syncRecipeAcrossBranches(product: Product) {
 interface DataStore extends AppData {
   loading: boolean;
   loaded: boolean;
-  fetchAll: () => Promise<void>;
+  fetchAll: () => Promise<boolean>;
 
   // Products
   addProduct: (p: Omit<Product, "id" | "sortOrder" | "branchId">) => Promise<void>;
@@ -162,15 +163,33 @@ export const useDataStore = create<DataStore>()((set, get) => ({
 
   fetchAll: async () => {
     const branchId = useBranchStore.getState().currentBranchId;
-    if (!branchId) return;
+    if (!branchId) return false;
     set({ loading: true });
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) throw new Error("No internet connection; loading saved POS data.");
       const data = await api.fetchAll(branchId);
       set({ ...data, loading: false, loaded: true });
       cacheShopLogo(branchId, data.settings.logo);
+      try {
+        await savePosSnapshot(branchId, data);
+      } catch (err) {
+        console.warn("Could not refresh the local POS snapshot:", err);
+      }
+      return true;
     } catch (err) {
+      try {
+        const snapshot = await loadPosSnapshot(branchId);
+        if (snapshot) {
+          set({ ...snapshot.data, loading: false, loaded: true });
+          cacheShopLogo(branchId, snapshot.data.settings.logo);
+          return false;
+        }
+      } catch (cacheError) {
+        console.warn("Could not load the local POS snapshot:", cacheError);
+      }
       set({ loading: false });
       toast(errorMessage(err, "Failed to load data from Supabase"), "error");
+      return false;
     }
   },
 

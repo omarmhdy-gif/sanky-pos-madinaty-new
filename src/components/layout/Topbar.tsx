@@ -12,6 +12,7 @@ import { useBranchStore } from "@/lib/store/useBranchStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ShopLogo } from "@/components/layout/ShopLogo";
+import { SyncButton } from "@/components/layout/SyncButton";
 
 export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: string; sidebarCollapsed: boolean; onToggleSidebar: () => void }) {
   const { t, locale, setLocale } = useI18n();
@@ -82,6 +83,7 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
       </div>
 
       <div className="flex items-center gap-1 sm:gap-2.5">
+        <SyncButton />
         {/* Owner-only, instant branch switch — distinct from the "Switch
             Branch" menu item below, which fully logs out and re-prompts for
             a PIN. This one keeps the owner authenticated and just changes
