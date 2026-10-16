@@ -53,6 +53,8 @@ import {
   fetchPrintJobHistory,
   discoverDeviceServer,
   discoverPrinters,
+  discoverUsbPrinters,
+  sendRawToUsbPrinter,
   sendRawToPrinter,
   hexToBytes,
   DEFAULT_DEVICE_SERVER_PORT,
@@ -110,6 +112,8 @@ export default function DevicesPage() {
     printerIp,
     printerPort,
     printerName,
+    printerConnectionType,
+    usbPrinterName,
     paperWidth,
     autoPrintReceipt,
     autoOpenDrawer,
@@ -121,6 +125,8 @@ export default function DevicesPage() {
     setPrinterIp,
     setPrinterPort,
     setPrinterName,
+    setPrinterConnectionType,
+    setUsbPrinterName,
     setPaperWidth,
     setAutoPrintReceipt,
     setAutoOpenDrawer,
@@ -137,6 +143,8 @@ export default function DevicesPage() {
   const markPrintQueueAttempt = usePrintQueueStore((s) => s.markAttempt);
   const orderQueue = useOrderQueueStore((s) => s.queue);
   const [retryingQueue, setRetryingQueue] = useState(false);
+  const [usbPrinters, setUsbPrinters] = useState<{ name: string; portName: string; driverName: string }[]>([]);
+  const [scanningUsb, setScanningUsb] = useState(false);
 
   const [testScan, setTestScan] = useState("");
   useBarcodeScanner((code) => {
@@ -186,9 +194,17 @@ export default function DevicesPage() {
         if (showToast) toast(t.devices.serverOffline, "error");
         return;
       }
+      if (printerConnectionType === "usb") {
+        const available = await discoverUsbPrinters({ host: printServerHost, port: printServerPort });
+        setUsbPrinters(available);
+        const online = !!usbPrinterName && available.some((printer) => printer.name === usbPrinterName);
+        setStatus(online ? "online" : "printer-offline");
+        if (showToast) toast(online ? t.devices.online : t.devices.printerOffline, online ? "success" : "info");
+        return;
+      }
       if (!printerIp) {
         setStatus("printer-offline");
-        if (showToast) toast(t.devices.notConfigured, "error");
+        if (showToast) toast(`${t.devices.receiptPrinter}: ${t.devices.notConfigured}`, "info");
         return;
       }
       const online = await testPrinterConnection(
@@ -208,7 +224,7 @@ export default function DevicesPage() {
   useEffect(() => {
     checkConnection(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [printServerHost, printServerPort, printerIp, printerPort]);
+  }, [printServerHost, printServerPort, printerIp, printerPort, printerConnectionType, usbPrinterName]);
 
   // Saves the discovered server as this till's Device Server. This is the
   // only thing that ever writes printServerHost/Port now — always whatever
@@ -338,6 +354,10 @@ export default function DevicesPage() {
   }, [autoReconnect, deviceServerConnected, status]);
 
   const handleTestPrint = async () => {
+    if (!printServerHost || (printerConnectionType === "usb" ? !usbPrinterName : !printerIp)) {
+      toast(`${t.devices.receiptPrinter}: ${t.devices.printerOffline}`, "info");
+      return;
+    }
     setPrinting(true);
     try {
       await printOrderReceipt({
@@ -405,6 +425,15 @@ export default function DevicesPage() {
 
     if (!health.ok) {
       steps.push({ label: t.devices.stepServerToPrinter, ok: false, detail: t.devices.diagPrinterSkippedDetail });
+    } else if (printerConnectionType === "usb") {
+      try {
+        const available = await discoverUsbPrinters(server);
+        setUsbPrinters(available);
+        const connected = !!usbPrinterName && available.some((printer) => printer.name === usbPrinterName);
+        steps.push({ label: t.devices.stepServerToPrinter, ok: connected, detail: connected ? `USB printer ready: ${usbPrinterName}` : "USB printer is not connected to the Windows Device Server." });
+      } catch (err) {
+        steps.push({ label: t.devices.stepServerToPrinter, ok: false, detail: err instanceof Error ? err.message : t.devices.printerOffline });
+      }
     } else if (!printerIp) {
       steps.push({ label: t.devices.stepServerToPrinter, ok: false, detail: t.devices.diagPrinterNotSetDetail });
     } else {
@@ -441,7 +470,7 @@ export default function DevicesPage() {
   // and "blocked by firewall" from each other.
   const pingServer = async () => {
     if (!printServerHost) {
-      toast(t.devices.notConfigured, "error");
+      toast(`${t.devices.receiptPrinter}: ${t.devices.notConfigured}`, "info");
       return;
     }
     setPinging(true);
@@ -487,7 +516,7 @@ export default function DevicesPage() {
     lines.push("");
     lines.push("Configuration:");
     lines.push(`  Printer Server Address: ${printServerHost || "(not set)"}:${printServerPort}`);
-    lines.push(`  Printer IP: ${printerIp || "(not set)"}:${printerPort}`);
+    lines.push(printerConnectionType === "usb" ? `  USB Printer: ${usbPrinterName || "(not selected)"}` : `  Printer IP: ${printerIp || "(not set)"}:${printerPort}`);
     lines.push("");
     lines.push("Diagnostic steps:");
     diagSteps.forEach((s) => lines.push(`  [${s.ok ? "PASS" : "FAIL"}] ${s.label} — ${s.detail}`));
@@ -520,7 +549,11 @@ export default function DevicesPage() {
     setRetryingQueue(true);
     for (const item of [...printQueue].reverse()) {
       try {
-        await sendRawToPrinter({ host: printServerHost, port: printServerPort }, { ip: item.printerIp, port: item.printerPort }, hexToBytes(item.dataHex));
+        if (item.printerConnectionType === "usb" && item.usbPrinterName) {
+          await sendRawToUsbPrinter({ host: printServerHost, port: printServerPort }, item.usbPrinterName, hexToBytes(item.dataHex));
+        } else {
+          await sendRawToPrinter({ host: printServerHost, port: printServerPort }, { ip: item.printerIp, port: item.printerPort }, hexToBytes(item.dataHex));
+        }
         removeFromPrintQueue(item.id);
         toast(`${t.devices.reprinted}: ${item.label}`, "success");
       } catch (err) {
@@ -551,7 +584,7 @@ export default function DevicesPage() {
         setPrinterPort(printers[0].port);
         toast(`${t.devices.printerFound}: ${printers[0].ip}`, "success");
       } else if (printers.length === 0) {
-        toast(t.devices.noPrintersFound, "error");
+        toast(`${t.devices.noPrintersFound}. ${t.devices.printerOffline}`, "info");
       } else {
         toast(`${printers.length} ${t.devices.printersFoundMultiple}`, "success");
       }
@@ -559,6 +592,24 @@ export default function DevicesPage() {
       toast(err instanceof Error ? err.message : t.devices.printFailed, "error");
     } finally {
       setScanningPrinters(false);
+    }
+  };
+
+  const runUsbScan = async () => {
+    if (!printServerHost) {
+      toast(`${t.devices.deviceServerCard}: ${t.devices.notConfigured}`, "info");
+      return;
+    }
+    setScanningUsb(true);
+    try {
+      const printers = await discoverUsbPrinters({ host: printServerHost, port: printServerPort });
+      setUsbPrinters(printers);
+      if (printers.length === 0) toast(`${t.devices.noPrintersFound}. ${t.devices.printerOffline}`, "info");
+      else if (printers.length === 1) setUsbPrinterName(printers[0].name);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t.devices.printFailed, "error");
+    } finally {
+      setScanningUsb(false);
     }
   };
 
@@ -800,6 +851,13 @@ export default function DevicesPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">{t.devices.printerNote}</p>
+            <div className="flex gap-2">
+              {(["network", "usb"] as const).map((type) => (
+                <Button key={type} type="button" variant={printerConnectionType === type ? "default" : "outline"} onClick={() => setPrinterConnectionType(type)}>
+                  {type === "network" ? "Network / IP" : "USB on Windows PC"}
+                </Button>
+              ))}
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label>{t.devices.printerName}</Label>
@@ -810,7 +868,7 @@ export default function DevicesPage() {
                   placeholder="Front Counter Epson"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              {printerConnectionType === "network" ? <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>{t.devices.printerIp}</Label>
                   <Input className="mt-1.5" value={printerIp} onChange={(e) => setPrinterIp(e.target.value)} placeholder="192.168.1.50" />
@@ -827,13 +885,23 @@ export default function DevicesPage() {
                   />
                   <p className="mt-1 text-[11px] text-muted-foreground">{t.devices.printerPortHint}</p>
                 </div>
-              </div>
+              </div> : <div className="space-y-2">
+                <Label>Windows USB printer</Label>
+                <select className="mt-1.5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={usbPrinterName} onChange={(e) => setUsbPrinterName(e.target.value)}>
+                  <option value="">Select detected printer</option>
+                  {usbPrinters.map((printer) => <option key={printer.name} value={printer.name}>{printer.name} · {printer.portName || printer.driverName}</option>)}
+                </select>
+                <Button type="button" variant="outline" disabled={scanningUsb} onClick={runUsbScan}>
+                  {scanningUsb ? <Loader2 className="h-4 w-4 animate-spin" /> : <Printer className="h-4 w-4" />}
+                  {scanningUsb ? t.devices.checking : "Find USB printers on this PC"}
+                </Button>
+              </div>}
             </div>
 
-            <Button variant="outline" className="w-full" disabled={scanningPrinters} onClick={runPrinterScan}>
+            {printerConnectionType === "network" && <Button variant="outline" className="w-full" disabled={scanningPrinters} onClick={runPrinterScan}>
               {scanningPrinters ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
               {scanningPrinters ? t.devices.scanningPrinters : t.devices.scanForPrinters}
-            </Button>
+            </Button>}
             {foundPrinters && foundPrinters.length > 1 && (
               <div className="space-y-1.5 rounded-lg border border-dashed border-border p-2">
                 <p className="px-1 text-[11px] text-muted-foreground">{t.devices.selectPrinterHint}</p>

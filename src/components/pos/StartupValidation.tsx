@@ -19,8 +19,6 @@ export function StartupValidation() {
     announced.current = true;
 
     const issues: string[] = [];
-    if (status.deviceServer !== "online") issues.push(t.devices.deviceServerCard);
-    if (status.printer === "offline") issues.push(t.devices.receiptPrinter);
     if (status.supabase !== "online") issues.push(t.devices.supabaseLabel);
     if (status.internet !== "online") issues.push(t.devices.internetLabel);
 
@@ -28,6 +26,9 @@ export function StartupValidation() {
       toast(t.devices.readyForSales, "success");
     } else {
       toast(`${t.devices.attentionNeeded}: ${issues.join(", ")}`, "error");
+    }
+    if (status.deviceServer !== "online" || status.printer === "offline") {
+      toast(`${t.devices.receiptPrinter}: ${t.devices.printerOffline}`, "info");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status.lastCheckedAt]);

@@ -35,15 +35,16 @@ export function AdjustStockDialog({
 
   if (!item) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const parsed = parseFloat(delta);
     if (!delta || Number.isNaN(parsed) || parsed === 0) {
       toast(t.common.required, "error");
       return;
     }
-    adjustStock(item.id, parsed, reason);
-    toast(t.common.save, "success");
-    onOpenChange(false);
+    if (await adjustStock(item.id, parsed, reason)) {
+      toast(t.common.save, "success");
+      onOpenChange(false);
+    }
   };
 
   return (

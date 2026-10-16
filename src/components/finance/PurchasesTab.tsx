@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { ShoppingBasket, Trash2 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -27,12 +28,60 @@ export function PurchasesTab() {
   const inventoryItems = useDataStore((s) => s.inventoryItems);
   const settings = useDataStore((s) => s.settings);
   const deletePurchase = useDataStore((s) => s.deletePurchase);
+  const receiveStock = useDataStore((s) => s.receiveStock);
   const branches = useBranchStore((s) => s.branches);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const isOwner = useAuthStore((s) => s.currentUser?.role) === "owner";
 
   const [deleteTarget, setDeleteTarget] = useState<Purchase | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const downloadPurchaseSheet = (template: boolean) => {
+    const rows = template
+      ? inventoryItems.map((item) => ({ "Item ID": item.id, "Item Name": item.name.en, "Quantity (Purchase Unit)": "", "Purchase Unit": item.purchaseUnit ?? item.unit ?? "piece", "Unit Cost (Purchase Unit)": "", Supplier: "" }))
+      : sorted.map((purchase) => ({ "Purchase ID": purchase.id, "Item ID": purchase.inventoryItemId, "Item Name": purchase.itemName?.en ?? "", "Quantity (Purchase Unit)": purchase.purchaseQuantity ?? purchase.quantity, "Purchase Unit": purchase.purchaseUnit ?? inventoryItems.find((i) => i.id === purchase.inventoryItemId)?.purchaseUnit ?? "piece", "Unit Cost (Purchase Unit)": purchase.purchaseUnitCost ?? purchase.unitCost, "Total Cost": purchase.totalCost, Supplier: purchase.supplier ?? "", Date: purchase.createdAt }));
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, template ? "Purchase Import" : "Purchase History");
+    XLSX.writeFile(workbook, `madinaty-purchases${template ? "-template" : ""}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const importPurchases = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    let imported = 0;
+    let failed = 0;
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      if (!worksheet) throw new Error("The workbook has no worksheet.");
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+      if (rows.length > 200) throw new Error("Import up to 200 purchase rows at a time.");
+      for (const [index, row] of rows.entries()) {
+        const id = String(row["Item ID"] ?? "").trim();
+        const item = inventoryItems.find((candidate) => candidate.id === id);
+        const quantity = Number(row["Quantity (Purchase Unit)"]);
+        const unitCost = Number(row["Unit Cost (Purchase Unit)"]);
+        const unit = String(row["Purchase Unit"] ?? "").trim();
+        if (!item || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) || unitCost < 0 || (unit && unit !== (item.purchaseUnit ?? item.unit ?? "piece"))) {
+          failed++;
+          toast(`Purchase row ${index + 2} is invalid. Check Item ID, quantity, unit and cost.`, "error");
+          continue;
+        }
+        if (await receiveStock(item.id, quantity, unitCost, String(row.Supplier ?? "").trim() || undefined)) imported++;
+        else failed++;
+      }
+      toast(`Purchases imported: ${imported}; failed: ${failed}.`, failed ? "info" : "success");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : "Could not import the purchase sheet.", "error");
+    } finally {
+      setImporting(false);
+      event.target.value = "";
+    }
+  };
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -68,6 +117,13 @@ export function PurchasesTab() {
     <div className="space-y-5">
       <p className="text-sm text-muted-foreground">{t.purchases.subtitle}</p>
 
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="outline" onClick={() => downloadPurchaseSheet(false)}>Export Purchases</Button>
+        <Button size="sm" variant="outline" onClick={() => downloadPurchaseSheet(true)}>Download Purchase Template</Button>
+        <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importPurchases} />
+        <Button size="sm" disabled={importing} onClick={() => importRef.current?.click()}>{importing ? "Importing…" : "Import Purchases"}</Button>
+      </div>
+
       <div className="rounded-2xl border border-border bg-card p-5">
         <p className="text-sm text-muted-foreground">{t.purchases.monthlyTotal}</p>
         <p className="mt-1 text-2xl font-bold text-primary">{formatMoney(monthlyTotal, settings.currencySymbol)}</p>
@@ -98,8 +154,8 @@ export function PurchasesTab() {
                     {p.supplier ? ` · ${t.purchases.supplier}: ${p.supplier}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {t.purchases.quantity}: {formatNumber(p.quantity, 0, 3)} {item?.unit ?? t.inventory.pieceUnit} ·{" "}
-                    {t.purchases.unitCost}: {formatMoney(p.unitCost, settings.currencySymbol)}
+                    {t.purchases.quantity}: {formatNumber(p.purchaseQuantity ?? p.quantity, 0, 3)} {p.purchaseUnit ?? item?.purchaseUnit ?? item?.unit ?? t.inventory.pieceUnit} ·{" "}
+                    {t.purchases.unitCost}: {formatMoney(p.purchaseUnitCost ?? p.unitCost, settings.currencySymbol)}
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

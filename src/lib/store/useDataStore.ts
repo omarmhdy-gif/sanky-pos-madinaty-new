@@ -19,6 +19,7 @@ import * as api from "@/lib/supabase/api";
 import { toast } from "@/components/ui/toast";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { cacheShopLogo } from "@/lib/store/shopLogoCache";
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -69,10 +70,11 @@ interface DataStore extends AppData {
   deleteCategory: (id: string) => Promise<void>;
   // Inventory
   addInventoryItem: (item: Omit<InventoryItem, "id" | "branchId">) => Promise<InventoryItem | undefined>;
-  updateInventoryItem: (id: string, patch: Partial<InventoryItem>) => Promise<void>;
+  updateInventoryItem: (id: string, patch: Partial<InventoryItem>) => Promise<boolean>;
   deleteInventoryItem: (id: string) => Promise<void>;
-  receiveStock: (itemId: string, qty: number, unitCost: number, supplier?: string) => Promise<void>;
-  adjustStock: (itemId: string, delta: number, reason: "waste" | "stock_count") => Promise<void>;
+  receiveStock: (itemId: string, qty: number, unitCost: number, supplier?: string) => Promise<boolean>;
+  setOpeningBalance: (itemId: string, purchaseQty: number, purchaseUnitCost: number) => Promise<boolean>;
+  adjustStock: (itemId: string, delta: number, reason: "waste" | "stock_count") => Promise<boolean>;
   recordInventoryQualityCheck: (input: Omit<InventoryQualityCheck, "id" | "branchId" | "checkedAt">) => Promise<void>;
   deletePurchase: (purchaseId: string) => Promise<void>;
   // Shifts
@@ -165,6 +167,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     try {
       const data = await api.fetchAll(branchId);
       set({ ...data, loading: false, loaded: true });
+      cacheShopLogo(branchId, data.settings.logo);
     } catch (err) {
       set({ loading: false });
       toast(errorMessage(err, "Failed to load data from Supabase"), "error");
@@ -236,7 +239,10 @@ export const useDataStore = create<DataStore>()((set, get) => ({
       set((state) => ({ inventoryItems: [...state.inventoryItems, created].sort((a, b) => a.quantity - b.quantity) }));
       return created;
     } catch (err) {
-      toast(errorMessage(err, "Failed to add inventory item"), "error");
+      const message = errorMessage(err, "Failed to add inventory item");
+      toast(/purchase_unit|conversion_factor|schema cache|does not exist/i.test(message)
+        ? "قاعدة البيانات تحتاج إلى تفعيل وحدات الشراء قبل إضافة المادة."
+        : message, "error");
       return undefined;
     }
   },
@@ -244,8 +250,13 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     try {
       const updated = await api.updateInventoryItem(id, patch);
       set((state) => ({ inventoryItems: state.inventoryItems.map((i) => (i.id === id ? updated : i)) }));
+      return true;
     } catch (err) {
-      toast(errorMessage(err, "Failed to update inventory item"), "error");
+      const message = errorMessage(err, "Failed to update inventory item");
+      toast(/purchase_unit|conversion_factor|schema cache|does not exist/i.test(message)
+        ? "قاعدة البيانات تحتاج إلى تفعيل وحدات الشراء قبل تعديل المادة."
+        : message, "error");
+      return false;
     }
   },
   deleteInventoryItem: async (id) => {
@@ -275,8 +286,26 @@ export const useDataStore = create<DataStore>()((set, get) => ({
         stockMovements: [result.movement, ...state.stockMovements],
         purchases: [result.purchase, ...state.purchases],
       }));
+      return true;
     } catch (err) {
       toast(errorMessage(err, "Failed to receive stock"), "error");
+      return false;
+    }
+  },
+  setOpeningBalance: async (itemId, purchaseQty, purchaseUnitCost) => {
+    try {
+      const { employeeId, employeeName } = currentEmployee();
+      const result = await api.setInventoryOpeningBalance({
+        branchId: requireBranchId(), inventoryItemId: itemId, purchaseQty, purchaseUnitCost, employeeId, employeeName,
+      });
+      set((state) => ({
+        inventoryItems: state.inventoryItems.map((item) => item.id === itemId ? { ...item, quantity: Number(result.quantity), lastPurchaseCost: Number(result.lastPurchaseCost) } : item),
+        stockMovements: [result.movement, ...state.stockMovements],
+      }));
+      return true;
+    } catch (err) {
+      toast(errorMessage(err, "Failed to update opening balance"), "error");
+      return false;
     }
   },
   adjustStock: async (itemId, delta, reason) => {
@@ -294,8 +323,10 @@ export const useDataStore = create<DataStore>()((set, get) => ({
         inventoryItems: state.inventoryItems.map((i) => (i.id === itemId ? { ...i, quantity: result.quantity } : i)),
         stockMovements: [result.movement, ...state.stockMovements],
       }));
+      return true;
     } catch (err) {
       toast(errorMessage(err, "Failed to adjust stock"), "error");
+      return false;
     }
   },
   recordInventoryQualityCheck: async (input) => {
@@ -528,6 +559,9 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     try {
       const updated = await api.updateSettings(requireBranchId(), patch);
       set({ settings: updated });
+      if (Object.prototype.hasOwnProperty.call(patch, "logo")) {
+        cacheShopLogo(requireBranchId(), updated.logo);
+      }
       return true;
     } catch (err) {
       set({ settings: previous });

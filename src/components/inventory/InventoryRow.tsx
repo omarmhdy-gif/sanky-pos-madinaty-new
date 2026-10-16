@@ -31,7 +31,7 @@ export function InventoryRow({
           </p>
           {showCost && item.lastPurchaseCost != null && (
             <p className="text-xs text-muted-foreground">
-              {t.inventory.lastPurchaseCost}: {formatMoney(item.lastPurchaseCost, settings.currencySymbol)}
+              {t.inventory.lastPurchaseCost}: {formatMoney(item.lastPurchaseCost * (item.conversionFactor ?? 1), settings.currencySymbol)} / {item.purchaseUnit ?? item.unit ?? "pc"}
             </p>
           )}
         </div>

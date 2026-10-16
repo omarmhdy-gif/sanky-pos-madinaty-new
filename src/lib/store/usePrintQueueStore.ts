@@ -13,6 +13,8 @@ export interface QueuedReceipt {
   dataHex: string;
   printerIp: string;
   printerPort: number;
+  printerConnectionType?: "network" | "usb";
+  usbPrinterName?: string;
   attempts: number;
   lastError: string | null;
 }

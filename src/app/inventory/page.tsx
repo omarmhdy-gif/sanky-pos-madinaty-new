@@ -15,6 +15,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import {
   Tabs,
   TabsList,
@@ -31,6 +32,7 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { InventoryRow } from "@/components/inventory/InventoryRow";
 import { InventoryItemFormDialog } from "@/components/inventory/InventoryItemFormDialog";
 import { AdjustStockDialog } from "@/components/inventory/AdjustStockDialog";
@@ -41,6 +43,8 @@ import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { formatDateTime, formatNumber, cn } from "@/lib/utils";
 import { stockLevel, type StockLevel } from "@/lib/inventory";
+import { supabase } from "@/lib/supabase/client";
+import { useBranchStore } from "@/lib/store/useBranchStore";
 import type {
   InventoryItem,
   InventoryItemType,
@@ -55,7 +59,7 @@ const STOCK_LEVEL_PRIORITY: Record<StockLevel, number> = {
 
 const VALID_TYPES: InventoryItemType[] = ["piece", "measured"];
 
-const VALID_UNITS: MeasuredUnit[] = ["g", "ml", "l", "kg"];
+const VALID_UNITS: MeasuredUnit[] = ["g", "ml"];
 
 type ImportResult = {
   row: number;
@@ -63,10 +67,13 @@ type ImportResult = {
   message: string;
 };
 
+type ImportWorkflowKind = "inventory" | "stock-count" | "opening-balance";
+
 export default function InventoryPage() {
   const { t, locale } = useI18n();
 
   const items = useDataStore((s) => s.inventoryItems);
+  const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const movements = useDataStore((s) => s.stockMovements);
 
   const addInventoryItem = useDataStore(
@@ -85,6 +92,10 @@ export default function InventoryPage() {
   const isOwner = role === "owner";
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const stockCountInputRef = useRef<HTMLInputElement | null>(null);
+  const openingBalanceInputRef = useRef<HTMLInputElement | null>(null);
+  const adjustStock = useDataStore((s) => s.adjustStock);
+  const setOpeningBalance = useDataStore((s) => s.setOpeningBalance);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<InventoryItem | null>(null);
@@ -102,6 +113,114 @@ export default function InventoryPage() {
     useState<ImportResult[]>([]);
   const [importDialogOpen, setImportDialogOpen] =
     useState(false);
+  const [importWorkflowKind, setImportWorkflowKind] = useState<ImportWorkflowKind | null>(null);
+  const [templateDownloaded, setTemplateDownloaded] = useState(false);
+
+  const openImportWorkflow = (kind: ImportWorkflowKind) => {
+    setTemplateDownloaded(false);
+    setImportWorkflowKind(kind);
+  };
+
+  const closeImportWorkflow = () => {
+    setImportWorkflowKind(null);
+    setTemplateDownloaded(false);
+  };
+
+  const downloadCurrentTemplate = async () => {
+    if (importWorkflowKind === "inventory") {
+      await handleDownloadTemplate();
+    } else if (importWorkflowKind) {
+      downloadOperationSheet(importWorkflowKind);
+    }
+    setTemplateDownloaded(true);
+  };
+
+  const chooseImportFile = () => {
+    if (!templateDownloaded) return;
+    if (importWorkflowKind === "inventory") fileInputRef.current?.click();
+    if (importWorkflowKind === "stock-count") stockCountInputRef.current?.click();
+    if (importWorkflowKind === "opening-balance") openingBalanceInputRef.current?.click();
+  };
+
+  const handleOperationFileChange = (
+    event: ChangeEvent<HTMLInputElement>,
+    kind: "stock-count" | "opening-balance",
+  ) => {
+    closeImportWorkflow();
+    void importOperationSheet(event, kind);
+  };
+
+  const downloadOperationSheet = (kind: "stock-count" | "opening-balance") => {
+    const rows = items.map((item) => kind === "stock-count" ? ({
+      "Item ID": item.id,
+      "Item Name": item.name.en,
+      "Counted Quantity": item.quantity,
+      Unit: item.unit ?? "piece",
+    }) : ({
+      "Item ID": item.id,
+      "Item Name": item.name.en,
+      "Opening Quantity": "",
+      "Purchase Unit": item.purchaseUnit ?? item.unit ?? "piece",
+      "Cost per Purchase Unit": "",
+    }));
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, sheet, kind === "stock-count" ? "Stock Count" : "Opening Balance");
+    XLSX.writeFile(book, `madinaty-${kind}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const importOperationSheet = async (event: ChangeEvent<HTMLInputElement>, kind: "stock-count" | "opening-balance") => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    const results: ImportResult[] = [];
+    try {
+      const book = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const sheet = book.Sheets[book.SheetNames[0]];
+      if (!sheet) throw new Error("The Excel file has no worksheet.");
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+      const seenIds = new Set<string>();
+      for (let index = 0; index < rows.length; index++) {
+        const row = rows[index];
+        try {
+          const id = String(row["Item ID"] ?? "").trim();
+          if (seenIds.has(id)) throw new Error(`Duplicate Item ID in this sheet: ${id}`);
+          seenIds.add(id);
+          const item = items.find((candidate) => candidate.id === id);
+          if (!item) throw new Error(`Unknown Item ID: ${id || "(empty)"}`);
+          if (kind === "stock-count") {
+            if (row["Counted Quantity"] === "") throw new Error("Counted Quantity is required.");
+            const counted = Number(row["Counted Quantity"]);
+            const unit = String(row.Unit ?? "").trim();
+            if (!Number.isFinite(counted) || counted < 0) throw new Error("Counted Quantity must be zero or greater.");
+            if (unit && unit !== (item.unit ?? "piece")) throw new Error(`Unit must match stock unit ${(item.unit ?? "piece")}.`);
+            const ok = counted === item.quantity || await adjustStock(item.id, counted - item.quantity, "stock_count");
+            if (!ok) throw new Error("Stock count could not be saved.");
+            results.push({ row: index + 2, status: "updated", message: `Count saved for ${item.name.en}` });
+          } else {
+            if (row["Opening Quantity"] === "" || row["Cost per Purchase Unit"] === "") throw new Error("Opening Quantity and Cost per Purchase Unit are required.");
+            const quantity = Number(row["Opening Quantity"]);
+            const cost = Number(row["Cost per Purchase Unit"]);
+            const unit = String(row["Purchase Unit"] ?? "").trim();
+            if (!Number.isFinite(quantity) || quantity < 0 || !Number.isFinite(cost) || cost < 0) throw new Error("Opening Quantity and Cost per Purchase Unit must be zero or greater.");
+            if (unit && unit !== (item.purchaseUnit ?? item.unit ?? "piece")) throw new Error(`Purchase Unit must be ${(item.purchaseUnit ?? item.unit ?? "piece")}.`);
+            const ok = await setOpeningBalance(item.id, quantity, cost);
+            if (!ok) throw new Error("Opening balance could not be saved.");
+            results.push({ row: index + 2, status: "updated", message: `Opening balance saved for ${item.name.en}` });
+          }
+        } catch (error) {
+          results.push({ row: index + 2, status: "failed", message: error instanceof Error ? error.message : "Invalid row." });
+        }
+      }
+      setImportResults(results.length ? results : [{ row: 0, status: "failed", message: "The sheet has no data rows." }]);
+    } catch (error) {
+      setImportResults([{ row: 0, status: "failed", message: error instanceof Error ? error.message : "Could not read workbook." }]);
+    } finally {
+      setImportDialogOpen(true);
+      setImporting(false);
+      event.target.value = "";
+    }
+  };
 
   const handleExportExcel = () => {
     const rows = items.map((item) => ({
@@ -119,6 +238,8 @@ export default function InventoryPage() {
         item.packSize ?? "",
       "Last Purchase Cost":
         item.lastPurchaseCost ?? "",
+      "Purchase Unit": item.purchaseUnit ?? "",
+      "Conversion Factor": item.conversionFactor ?? 1,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -141,6 +262,8 @@ export default function InventoryPage() {
       { wch: 16 },
       { wch: 12 },
       { wch: 20 },
+      { wch: 16 },
+      { wch: 18 },
     ];
 
     const date = new Date()
@@ -210,6 +333,8 @@ export default function InventoryPage() {
         key: "lastPurchaseCost",
         width: 20,
       },
+      { header: "Purchase Unit", key: "purchaseUnit", width: 16 },
+      { header: "Conversion Factor", key: "conversionFactor", width: 18 },
     ];
 
     worksheet.addRow({
@@ -223,6 +348,8 @@ export default function InventoryPage() {
       lowThreshold: "",
       packSize: "",
       lastPurchaseCost: "",
+      purchaseUnit: "",
+      conversionFactor: 1,
     });
 
     worksheet.getRow(1).font = {
@@ -250,11 +377,11 @@ export default function InventoryPage() {
       worksheet.getCell(`E${row}`).dataValidation = {
         type: "list",
         allowBlank: true,
-        formulae: ['"g,ml,l,kg"'],
+        formulae: ['"g,ml"'],
         showErrorMessage: true,
         errorTitle: "Invalid Unit",
         error:
-          "Please select g, ml, l or kg.",
+          "Please select g or ml for stock and recipe units.",
       };
 
       // Quantity
@@ -315,6 +442,16 @@ export default function InventoryPage() {
         errorTitle: "Invalid Cost",
         error:
           "Cost must be 0 or greater.",
+      };
+
+      worksheet.getCell(`L${row}`).dataValidation = {
+        type: "decimal",
+        operator: "greaterThan",
+        formulae: [0],
+        allowBlank: true,
+        showErrorMessage: true,
+        errorTitle: "Invalid Conversion Factor",
+        error: "Conversion Factor must be greater than 0.",
       };
     }
     const buffer = await workbook.xlsx.writeBuffer();
@@ -475,7 +612,7 @@ export default function InventoryPage() {
               )
             ) {
               throw new Error(
-                `Invalid Unit "${unitValue}". Use g, ml, l or kg.`
+                `Invalid Unit "${unitValue}". Use g or ml for stock and recipe units.`
               );
             }
 
@@ -522,6 +659,9 @@ export default function InventoryPage() {
             parseNumber(
               row["Last Purchase Cost"]
             );
+          const purchaseUnitText = String(row["Purchase Unit"] ?? "").trim();
+          const conversionFactor = parseNumber(row["Conversion Factor"]) ?? 1;
+          if (conversionFactor <= 0) throw new Error("Conversion Factor must be greater than 0.");
 
           if (
             criticalThreshold !== undefined &&
@@ -571,6 +711,10 @@ export default function InventoryPage() {
               );
             }
 
+            if (quantity !== existingItem.quantity || (lastPurchaseCost !== undefined && lastPurchaseCost !== existingItem.lastPurchaseCost)) {
+              throw new Error("Stock Quantity and Last Purchase Cost are read-only in the item sheet. Use stock movement or opening-balance operations for inventory values.");
+            }
+
             await updateInventoryItem(
               id,
               {
@@ -580,7 +724,8 @@ export default function InventoryPage() {
                 },
                 type,
                 unit,
-                quantity,
+                purchaseUnit: type === "measured" ? purchaseUnitText || unit : undefined,
+                conversionFactor: type === "measured" ? conversionFactor : 1,
                 criticalThreshold,
                 lowThreshold,
                 packSize:
@@ -606,6 +751,8 @@ export default function InventoryPage() {
                 },
                 type,
                 unit,
+                purchaseUnit: type === "measured" ? purchaseUnitText || unit : undefined,
+                conversionFactor: type === "measured" ? conversionFactor : 1,
                 quantity,
                 criticalThreshold,
                 lowThreshold,
@@ -853,6 +1000,12 @@ export default function InventoryPage() {
       (r) => r.status === "failed"
     ).length;
 
+  const importTitle = importWorkflowKind === "inventory"
+    ? "Import Inventory Items"
+    : importWorkflowKind === "stock-count"
+      ? "Import Stock Count"
+      : "Import Opening Balance";
+
   return (
     <AppShell title={t.inventory.title}>
       <div className="space-y-4 p-4 sm:p-6 pb-10">
@@ -874,34 +1027,32 @@ export default function InventoryPage() {
                 Export Excel
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={
-                  handleDownloadTemplate
-                }
-              >
-                <FileDown className="h-3.5 w-3.5" />
-                Download Template
+              <Button variant="outline" size="sm" disabled={importing} onClick={() => openImportWorkflow("stock-count")}>
+                <Upload className="h-3.5 w-3.5" /> Import Count
               </Button>
+              <input ref={stockCountInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => handleOperationFileChange(event, "stock-count")} />
+
+              <Button variant="outline" size="sm" disabled={importing} onClick={() => openImportWorkflow("opening-balance")}>
+                <Upload className="h-3.5 w-3.5" /> Import Opening Balance
+              </Button>
+              <input ref={openingBalanceInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => handleOperationFileChange(event, "opening-balance")} />
 
               <input
                 ref={fileInputRef}
                 type="file"
                 accept=".xlsx,.xls"
                 className="hidden"
-                onChange={
-                  handleImportExcel
-                }
+                onChange={(event) => {
+                  closeImportWorkflow();
+                  void handleImportExcel(event);
+                }}
               />
 
               <Button
                 variant="outline"
                 size="sm"
                 disabled={importing}
-                onClick={() =>
-                  fileInputRef.current?.click()
-                }
+                onClick={() => openImportWorkflow("inventory")}
               >
                 <Upload className="h-3.5 w-3.5" />
                 {importing
@@ -962,6 +1113,38 @@ export default function InventoryPage() {
           currentStockList
         )}
       </div>
+
+      <Dialog
+        open={importWorkflowKind !== null}
+        onOpenChange={(open) => !open && closeImportWorkflow()}
+      >
+        <DialogContent className="max-w-md" preventOutsideClose>
+          <DialogHeader>
+            <DialogTitle>{importTitle}</DialogTitle>
+            <DialogDescription>
+              Download the matching template, fill it in, then upload the completed Excel file.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ol className="space-y-3 rounded-lg border border-border p-4 text-sm">
+            <li><span className="font-semibold">1.</span> Download the {importWorkflowKind === "inventory" ? "inventory" : importWorkflowKind === "stock-count" ? "stock count" : "opening balance"} template.</li>
+            <li><span className="font-semibold">2.</span> Fill in the rows and save the completed file.</li>
+            <li><span className="font-semibold">3.</span> Upload the completed Excel file.</li>
+          </ol>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={closeImportWorkflow}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={() => void downloadCurrentTemplate()}>
+              <FileDown className="h-3.5 w-3.5" /> Download Template
+            </Button>
+            <Button disabled={!templateDownloaded || importing} onClick={chooseImportFile}>
+              <Upload className="h-3.5 w-3.5" /> Choose File to Upload
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <InventoryItemFormDialog
         item={editing}

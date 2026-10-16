@@ -1,9 +1,11 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n";
+import { ShopLogo, useShopLogoUrl } from "@/components/layout/ShopLogo";
 
 export function BrandSplash() {
   const { locale } = useI18n();
+  const logo = useShopLogoUrl();
   const label = locale === "ar" ? "جارٍ تجهيز البرنامج" : "Preparing Sanky POS";
 
   return (
@@ -13,9 +15,13 @@ export function BrandSplash() {
         <div className="sanky-splash-mark" aria-hidden="true">
           <span className="sanky-splash-ring sanky-splash-ring-outer" />
           <span className="sanky-splash-ring sanky-splash-ring-inner" />
-          <img src="/sanky-brand-mark.png" alt="" className="h-[4.5rem] w-[4.5rem] object-contain" />
+          {logo ? (
+            <ShopLogo className="h-24 w-24 rounded-2xl" />
+          ) : (
+            <img src="/sanky-brand-mark.png" alt="" className="h-[4.5rem] w-[4.5rem] object-contain" />
+          )}
         </div>
-        <img src="/sanky-brand-lockup.png" alt="SANKY" className="sanky-splash-wordmark mt-5 h-auto w-[min(82vw,18rem)] object-contain" />
+        {logo ? null : <img src="/sanky-brand-lockup.png" alt="SANKY" className="sanky-splash-wordmark mt-5 h-auto w-[min(82vw,18rem)] object-contain" />}
         <p className="mt-5 text-sm font-medium tracking-wide text-stone-600 dark:text-stone-300">
           {locale === "ar" ? "بنجهّز مساحة العمل…" : "Getting your workspace ready…"}
         </p>

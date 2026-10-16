@@ -43,6 +43,12 @@ export interface NetworkPrinterTarget {
   port: number;
 }
 
+export interface UsbPrinterTarget {
+  name: string;
+  portName: string;
+  driverName: string;
+}
+
 export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
@@ -159,6 +165,24 @@ export async function sendRawToPrinter(server: PrinterServerTarget, printer: Net
     const label = friendly ? `${friendly}${errorCode ? ` (${errorCode})` : ""}` : null;
     throw new PrinterConnectionError(label ? `${label}: ${rawError}` : rawError, timedOut ? stage : null);
   }
+}
+
+export async function discoverUsbPrinters(server: PrinterServerTarget): Promise<UsbPrinterTarget[]> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(serverUrl(server, "/relay/usb-printers"), { signal: controller.signal });
+    if (!response.ok) throw new PrinterConnectionError(`Local Printer Server returned an error (${response.status}).`);
+    const payload = await response.json() as { printers?: UsbPrinterTarget[] };
+    return payload.printers ?? [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function sendRawToUsbPrinter(server: PrinterServerTarget, printerName: string, bytes: Uint8Array): Promise<void> {
+  const response = await postJson(serverUrl(server, "/relay/print-usb"), { name: printerName, dataHex: bytesToHex(bytes) }, 30000);
+  if (!response.success) throw new PrinterConnectionError(String(response.error ?? "USB printer is not available."), "connecting");
 }
 
 export interface HealthCheckResult {

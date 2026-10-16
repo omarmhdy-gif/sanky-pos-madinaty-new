@@ -31,7 +31,7 @@ export function ReceiveStockDialog({
   useEffect(() => {
     if (open) {
       setQty("");
-      setUnitCost(item?.lastPurchaseCost != null ? String(item.lastPurchaseCost) : "");
+      setUnitCost(item?.lastPurchaseCost != null ? String(item.lastPurchaseCost * (item.conversionFactor ?? 1)) : "");
       setSupplier("");
     }
   }, [open, item]);
@@ -53,9 +53,11 @@ export function ReceiveStockDialog({
     }
     setSubmitting(true);
     try {
-      await receiveStock(item.id, parsedQty, parsedCost, supplier.trim() || undefined);
-      toast(t.receiveStock.received, "success");
-      onOpenChange(false);
+      const received = await receiveStock(item.id, parsedQty, parsedCost, supplier.trim() || undefined);
+      if (received) {
+        toast(t.receiveStock.received, "success");
+        onOpenChange(false);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -88,9 +90,12 @@ export function ReceiveStockDialog({
             </div>
             <div>
               <Label>{t.receiveStock.unit}</Label>
-              <Input className="mt-1.5" value={item.unit ?? t.inventory.pieceUnit} disabled />
+              <Input className="mt-1.5" value={item.purchaseUnit ?? item.unit ?? t.inventory.pieceUnit} disabled />
             </div>
           </div>
+          {item.type === "measured" && (item.conversionFactor ?? 1) !== 1 && (
+            <p className="text-xs text-muted-foreground">1 {item.purchaseUnit} = {item.conversionFactor} {item.unit}; unit cost is entered per {item.purchaseUnit}.</p>
+          )}
 
           {/* Piece-type items only — a faster way to build up the quantity
               above instead of typing it out. Each tap just adds to the same

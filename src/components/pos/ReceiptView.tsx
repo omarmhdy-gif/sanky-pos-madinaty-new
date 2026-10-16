@@ -27,6 +27,13 @@ export function ReceiptView({ order }: { order: Order }) {
       style={{ width: paperWidth === "58" ? "58mm" : "80mm", maxWidth: "100%" }}
     >
       <div className="text-center">
+        {settings.logo && (
+          <img
+            src={settings.logo}
+            alt={settings.shopName || "Shop logo"}
+            className="mx-auto mb-2 max-h-16 max-w-[70%] object-contain"
+          />
+        )}
         <p className="text-sm font-bold">{settings.shopName}</p>
         {branchName && <p className="text-[10px] text-muted-foreground">{branchName}</p>}
         {settings.address && <p className="text-[10px] text-muted-foreground">{settings.address}</p>}

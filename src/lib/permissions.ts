@@ -1,23 +1,26 @@
 import {
-  LayoutDashboard,
-  ShoppingCart,
-  Package,
-  Receipt,
-  BarChart3,
-  Settings,
-  Boxes,
-  ChefHat,
+  LayoutGrid,
+  ShoppingBag,
+  PackageOpen,
+  ClipboardList,
+  ChartNoAxesCombined,
+  SlidersHorizontal,
+  PackageSearch,
+  CookingPot,
   Landmark,
-  Users,
-  MonitorSmartphone,
-  Clock,
+  UsersRound,
+  MonitorCog,
+  CalendarCheck2,
+  WalletCards,
+  ContactRound,
+  BriefcaseBusiness,
 } from "lucide-react";
 import type { UserRole, PermissionKey, StaffUser } from "@/lib/types";
 
 export interface NavItem {
   href: string;
-  icon: typeof LayoutDashboard;
-  key: "dashboard" | "pos" | "inventory" | "products" | "recipes" | "orders" | "finance" | "reports" | "employees" | "customers" | "settings" | "devices" | "attendance";
+  icon: typeof LayoutGrid;
+  key: "dashboard" | "pos" | "inventory" | "products" | "recipes" | "orders" | "finance" | "reports" | "employees" | "customers" | "settings" | "devices" | "attendance" | "hr";
   roles: UserRole[];
   /** Granular permission gate (any-of — Finance needs either "finance" or
    * "purchases", everything else has exactly one entry). Absent for
@@ -34,19 +37,20 @@ export interface NavItem {
 // Recipes/Devices have no `permissions` entry, so they stay hard-locked to
 // owner regardless of any grant — unaffected by the permission system.
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", icon: LayoutDashboard, key: "dashboard", roles: ["owner", "cashier"], permissions: ["dashboard"] },
-  { href: "/pos", icon: ShoppingCart, key: "pos", roles: ["owner", "cashier"], permissions: ["pos"] },
-  { href: "/orders", icon: Receipt, key: "orders", roles: ["owner", "cashier"], permissions: ["orders"] },
-  { href: "/inventory", icon: Boxes, key: "inventory", roles: ["owner", "cashier"], permissions: ["inventory"] },
-  { href: "/attendance", icon: Clock, key: "attendance", roles: ["owner", "cashier"], permissions: ["attendance"] },
-  { href: "/products", icon: Package, key: "products", roles: ["owner", "cashier"], permissions: ["products"] },
-  { href: "/recipes", icon: ChefHat, key: "recipes", roles: ["owner"] },
+  { href: "/dashboard", icon: LayoutGrid, key: "dashboard", roles: ["owner", "cashier"], permissions: ["dashboard"] },
+  { href: "/pos", icon: ShoppingBag, key: "pos", roles: ["owner", "cashier"], permissions: ["pos"] },
+  { href: "/orders", icon: ClipboardList, key: "orders", roles: ["owner", "cashier"], permissions: ["orders"] },
+  { href: "/inventory", icon: PackageSearch, key: "inventory", roles: ["owner", "cashier"], permissions: ["inventory"] },
+  { href: "/attendance", icon: CalendarCheck2, key: "attendance", roles: ["owner", "cashier"], permissions: ["attendance"] },
+  { href: "/products", icon: PackageOpen, key: "products", roles: ["owner", "cashier"], permissions: ["products"] },
+  { href: "/recipes", icon: CookingPot, key: "recipes", roles: ["owner"] },
   { href: "/finance", icon: Landmark, key: "finance", roles: ["owner", "cashier"], permissions: ["finance", "purchases"] },
-  { href: "/reports", icon: BarChart3, key: "reports", roles: ["owner", "cashier"], permissions: ["reports"] },
-  { href: "/employees", icon: Users, key: "employees", roles: ["owner", "cashier"], permissions: ["employees"] },
-  { href: "/customers", icon: Users, key: "customers", roles: ["owner", "cashier"], permissions: ["customers"] },
-  { href: "/settings", icon: Settings, key: "settings", roles: ["owner", "cashier"], permissions: ["settings"] },
-  { href: "/devices", icon: MonitorSmartphone, key: "devices", roles: ["owner"] },
+  { href: "/reports", icon: ChartNoAxesCombined, key: "reports", roles: ["owner", "cashier"], permissions: ["reports"] },
+  { href: "/employees", icon: UsersRound, key: "employees", roles: ["owner", "cashier"], permissions: ["employees"] },
+  { href: "/hr", icon: BriefcaseBusiness, key: "hr", roles: ["owner"] },
+  { href: "/customers", icon: ContactRound, key: "customers", roles: ["owner", "cashier"], permissions: ["customers"] },
+  { href: "/settings", icon: SlidersHorizontal, key: "settings", roles: ["owner", "cashier"], permissions: ["settings"] },
+  { href: "/devices", icon: MonitorCog, key: "devices", roles: ["owner"] },
 ];
 
 // Backward-compat fallback for any staff row whose `permissions` is still

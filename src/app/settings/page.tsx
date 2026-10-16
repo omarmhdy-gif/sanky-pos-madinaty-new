@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Sun, Moon, Download, Upload, FileSpreadsheet, Trash2, Tag, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopLogo } from "@/components/layout/ShopLogo";
+import { makeLogoBackgroundTransparent } from "@/lib/branding/transparentLogo";
 import { MenuQrManager } from "@/components/settings/MenuQrManager";
 import { ExternalPaymentManager } from "@/components/settings/ExternalPaymentManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -258,8 +259,9 @@ export default function SettingsPage() {
     setUploadingLogo(true);
 
     try {
-      const url = await uploadImage(file, "logos");
-      updateSettings({ logo: url });
+      const transparentPng = await makeLogoBackgroundTransparent(file);
+      const url = await uploadImage(transparentPng, "logos");
+      await updateSettings({ logo: url });
     } catch (err) {
       toast(err instanceof Error ? err.message : "Upload failed", "error");
     } finally {
@@ -353,7 +355,7 @@ export default function SettingsPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => updateSettings({ logo: undefined })}
+                    onClick={() => updateSettings({ logo: null })}
                   >
                     {t.settings.removeLogo}
                   </Button>

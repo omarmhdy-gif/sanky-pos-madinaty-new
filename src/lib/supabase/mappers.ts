@@ -84,6 +84,8 @@ export function fromInventoryItemRow(row: any): InventoryItem {
     name: row.name,
     type: row.type,
     unit: row.unit ?? undefined,
+    purchaseUnit: row.purchase_unit ?? undefined,
+    conversionFactor: row.conversion_factor != null ? Number(row.conversion_factor) : undefined,
     quantity: Number(row.quantity),
     criticalThreshold: row.critical_threshold != null ? Number(row.critical_threshold) : undefined,
     lowThreshold: row.low_threshold != null ? Number(row.low_threshold) : undefined,
@@ -102,10 +104,13 @@ export function toInventoryItemInsertRow(
     name: item.name,
     type: item.type,
     unit: item.unit ?? null,
+    purchase_unit: item.purchaseUnit ?? item.unit ?? null,
+    conversion_factor: item.conversionFactor ?? 1,
     quantity: item.quantity,
     critical_threshold: item.criticalThreshold ?? null,
     low_threshold: item.lowThreshold ?? null,
     pack_size: item.packSize ?? null,
+    last_purchase_cost: item.lastPurchaseCost ?? null,
   };
 }
 
@@ -114,6 +119,8 @@ export function toInventoryItemPatchRow(patch: Partial<InventoryItem>) {
   if (patch.name !== undefined) row.name = patch.name;
   if (patch.type !== undefined) row.type = patch.type;
   if (patch.unit !== undefined) row.unit = patch.unit;
+  if (patch.purchaseUnit !== undefined) row.purchase_unit = patch.purchaseUnit || null;
+  if (patch.conversionFactor !== undefined) row.conversion_factor = patch.conversionFactor;
   if (patch.criticalThreshold !== undefined) row.critical_threshold = patch.criticalThreshold;
   if (patch.lowThreshold !== undefined) row.low_threshold = patch.lowThreshold;
   if (patch.packSize !== undefined) row.pack_size = patch.packSize;
@@ -367,7 +374,11 @@ export function fromPurchaseRow(row: any): Purchase {
     inventoryItemId: row.inventory_item_id,
     itemName: row.inventory_items?.name ?? undefined,
     quantity: Number(row.quantity),
+    purchaseQuantity: row.purchase_quantity != null ? Number(row.purchase_quantity) : undefined,
+    purchaseUnit: row.purchase_unit ?? undefined,
+    conversionFactor: row.conversion_factor != null ? Number(row.conversion_factor) : undefined,
     unitCost: Number(row.unit_cost),
+    purchaseUnitCost: row.purchase_unit_cost != null ? Number(row.purchase_unit_cost) : undefined,
     totalCost: Number(row.total_cost),
     supplier: row.supplier ?? undefined,
     employeeId: row.employee_id ?? undefined,

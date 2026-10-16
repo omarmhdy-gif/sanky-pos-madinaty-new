@@ -54,7 +54,13 @@ function textBytes(s: string): number[] {
  * body, cut. Real thermal-printer commands, relayed to the printer by the
  * Local Printer Server (see printerServerClient.ts) — browsers can't open a
  * raw TCP socket themselves, which is why that relay exists at all. */
-export function buildReceiptBytes(order: Order, settings: ShopSettings, branchName: string, locale: "en" | "ar"): Uint8Array {
+export function buildReceiptBytes(
+  order: Order,
+  settings: ShopSettings,
+  branchName: string,
+  locale: "en" | "ar",
+  logoRaster?: Uint8Array
+): Uint8Array {
   const bytes: number[] = [];
   const line = (s = "") => bytes.push(...textBytes(s + "\n"));
   const center = () => bytes.push(ESC, 0x61, 1);
@@ -65,6 +71,10 @@ export function buildReceiptBytes(order: Order, settings: ShopSettings, branchNa
   bytes.push(FS, 0x2e); // FS . — cancel Kanji/double-byte character mode
   bytes.push(ESC, 0x74, 0); // ESC t 0 — select character code table 0 (PC437: USA, Standard Europe)
   center();
+  if (logoRaster?.length) {
+    bytes.push(...logoRaster);
+    bytes.push(0x0a, 0x0a);
+  }
   bold(true);
   line(settings.shopName);
   bold(false);

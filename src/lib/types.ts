@@ -253,6 +253,10 @@ export interface InventoryItem {
   name: { en: string; ar: string };
   type: InventoryItemType;
   unit?: MeasuredUnit; // undefined for "piece" items
+  /** Inventory and recipe quantities stay in this small/base unit. */
+  purchaseUnit?: string;
+  /** Number of base units in one purchase unit (e.g. 1000 g per kg). */
+  conversionFactor?: number;
   quantity: number;
   criticalThreshold?: number;
   lowThreshold?: number;
@@ -285,7 +289,11 @@ export interface Purchase {
   /** Resolved via a database join at fetch time — see StockMovement.itemName. */
   itemName?: { en: string; ar: string };
   quantity: number;
+  purchaseQuantity?: number;
+  purchaseUnit?: string;
+  conversionFactor?: number;
   unitCost: number;
+  purchaseUnitCost?: number;
   totalCost: number;
   supplier?: string;
   employeeId?: string;
@@ -318,7 +326,7 @@ export interface Shift {
   talabatRevenue?: number;
 }
 
-export type StockMovementReason = "sale" | "manual_receive" | "waste" | "stock_count";
+export type StockMovementReason = "sale" | "manual_receive" | "waste" | "stock_count" | "opening_balance";
 
 export interface StockMovement {
   id: string;
@@ -356,7 +364,7 @@ export interface MultiPricingSettings {
 
 export interface ShopSettings {
   shopName: string;
-  logo?: string;
+  logo?: string | null;
   currency: string; // e.g. "EGP", "SAR", "USD"
   currencySymbol: string;
   taxRate: number; // percentage
@@ -401,6 +409,34 @@ export interface AttendanceEmployee {
   shiftStart?: string; // "HH:MM", 24h
   shiftEnd?: string; // "HH:MM", 24h
   graceMinutes?: number;
+}
+
+export interface HrEmployee extends AttendanceEmployee {
+  phone?: string | null;
+  jobTitle?: string | null;
+  hireDate?: string | null;
+  monthlySalary: number;
+}
+
+export interface HrDeduction {
+  description: string;
+  amount: number;
+}
+
+export interface HrPayrollEntry {
+  id: string;
+  branchId: string;
+  employeeId: string;
+  employeeName: string;
+  payrollMonth: string;
+  baseSalary: number;
+  deductions: HrDeduction[];
+  totalDeductions: number;
+  netSalary: number;
+  note?: string | null;
+  status: "draft" | "paid";
+  createdAt: string;
+  paidAt?: string | null;
 }
 
 /** Clock-in/out record for an AttendanceEmployee — distinct from Shift

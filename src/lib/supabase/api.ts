@@ -27,6 +27,9 @@ import type {
   Attendance,
   AttendanceEmployee,
   PromoCode,
+  HrEmployee,
+  HrPayrollEntry,
+  HrDeduction,
 } from "@/lib/types";
 import {
   fromBranchRow,
@@ -583,16 +586,36 @@ export async function receivePurchase(input: {
   employeeId?: string;
   employeeName: string;
 }): Promise<{ inventoryItem: Partial<InventoryItem>; movement: StockMovement; purchase: Purchase }> {
-  const res = await supabase.rpc("receive_purchase", {
+  const res = await supabase.rpc("receive_purchase_v2", {
     p_branch_id: input.branchId,
     p_inventory_item_id: input.inventoryItemId,
-    p_qty: input.qty,
-    p_unit_cost: input.unitCost,
+    p_purchase_qty: input.qty,
+    p_purchase_unit_cost: input.unitCost,
     p_employee_id: input.employeeId ?? null,
     p_employee_name: input.employeeName,
     p_supplier: input.supplier ?? null,
   });
   return unwrap(res) as unknown as { inventoryItem: Partial<InventoryItem>; movement: StockMovement; purchase: Purchase };
+}
+
+export async function setInventoryOpeningBalance(input: {
+  branchId: string;
+  inventoryItemId: string;
+  purchaseQty: number;
+  purchaseUnitCost: number;
+  employeeId?: string;
+  employeeName: string;
+}): Promise<{ quantity: number; lastPurchaseCost: number; movement: StockMovement }> {
+  const res = await supabase.rpc("set_inventory_opening_balance", {
+    p_branch_id: input.branchId,
+    p_inventory_item_id: input.inventoryItemId,
+    p_purchase_qty: input.purchaseQty,
+    p_purchase_unit_cost: input.purchaseUnitCost,
+    p_employee_id: input.employeeId ?? null,
+    p_employee_name: input.employeeName,
+  });
+  const data = unwrap(res) as { quantity: number; lastPurchaseCost: number; movement: StockMovement };
+  return data;
 }
 
 /** Deletes a purchase — removes it from purchase history and (since Finance
@@ -1008,4 +1031,51 @@ export async function checkInAttendance(input: {
 export async function checkOutAttendance(attendanceId: string): Promise<Attendance> {
   const res = await supabase.rpc("check_out_attendance", { p_attendance_id: attendanceId });
   return fromAttendanceRow(unwrap(res));
+}
+
+// HR data uses owner-PIN-verified RPCs; payroll tables are not directly readable.
+export async function createHrSession(branchId: string, pin: string): Promise<string> {
+  return unwrap(await supabase.rpc("hr_create_session", { p_branch_id: branchId, p_pin: pin }));
+}
+
+export async function listHrEmployees(branchId: string, token: string): Promise<HrEmployee[]> {
+  return unwrap(await supabase.rpc("hr_list_employees", { p_branch_id: branchId, p_session_token: token }));
+}
+
+export async function saveHrEmployee(input: {
+  branchId: string; token: string; employeeId?: string; name: string; pin?: string;
+  isActive: boolean; phone?: string; jobTitle?: string; hireDate?: string; monthlySalary: number;
+}): Promise<HrEmployee> {
+  return unwrap(await supabase.rpc("hr_save_employee", {
+    p_branch_id: input.branchId, p_session_token: input.token, p_employee_id: input.employeeId ?? null,
+    p_name: input.name, p_pin: input.pin ?? null, p_is_active: input.isActive,
+    p_phone: input.phone ?? null, p_job_title: input.jobTitle ?? null,
+    p_hire_date: input.hireDate || null, p_monthly_salary: input.monthlySalary,
+  }));
+}
+
+export async function listHrPayroll(branchId: string, token: string, month: string): Promise<HrPayrollEntry[]> {
+  return unwrap(await supabase.rpc("hr_list_payroll", {
+    p_branch_id: branchId, p_session_token: token, p_payroll_month: `${month}-01`,
+  }));
+}
+
+export async function generateHrPayroll(branchId: string, token: string, month: string): Promise<HrPayrollEntry[]> {
+  return unwrap(await supabase.rpc("hr_generate_payroll", {
+    p_branch_id: branchId, p_session_token: token, p_payroll_month: `${month}-01`,
+  }));
+}
+
+export async function saveHrPayrollDeductions(
+  branchId: string, token: string, payrollId: string, deductions: HrDeduction[], note: string,
+): Promise<HrPayrollEntry[]> {
+  return unwrap(await supabase.rpc("hr_save_payroll_deductions", {
+    p_branch_id: branchId, p_session_token: token, p_payroll_id: payrollId, p_deductions: deductions, p_note: note,
+  }));
+}
+
+export async function markHrPayrollPaid(branchId: string, token: string, payrollId: string): Promise<HrPayrollEntry[]> {
+  return unwrap(await supabase.rpc("hr_mark_payroll_paid", {
+    p_branch_id: branchId, p_session_token: token, p_payroll_id: payrollId,
+  }));
 }

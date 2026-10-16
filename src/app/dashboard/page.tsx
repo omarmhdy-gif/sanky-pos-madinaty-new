@@ -375,7 +375,6 @@ export default function DashboardPage() {
                 settings.currencySymbol
               )}
               accent="brown"
-              note="0% from yesterday"
             />
 
             <MetricCard
@@ -383,7 +382,6 @@ export default function DashboardPage() {
               label={t.dashboard.todayOrders}
               value={formatNumber(rangeOrders.length)}
               accent="green"
-              note="0% from yesterday"
             />
 
             <MetricCard
@@ -394,7 +392,6 @@ export default function DashboardPage() {
                 settings.currencySymbol
               )}
               accent="orange"
-              note="0% from last month"
             />
 
             <MetricCard
@@ -405,7 +402,6 @@ export default function DashboardPage() {
                 settings.currencySymbol
               )}
               accent="blue"
-              note="0% from last month"
             />
 
             <MetricCard
@@ -420,7 +416,6 @@ export default function DashboardPage() {
                   ? "olive"
                   : "brown"
               }
-              note="0% from yesterday"
             />
 
             <MetricCard

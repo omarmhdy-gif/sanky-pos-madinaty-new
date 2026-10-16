@@ -1,10 +1,11 @@
 import type { Order, Shift, ShopSettings } from "@/lib/types";
 import { buildReceiptBytes, buildDrawerKickBytes, buildShiftReportBytes } from "@/lib/printing/escpos";
-import { sendRawToPrinter, PrinterConnectionError, bytesToHex } from "@/lib/printing/printerServerClient";
+import { sendRawToPrinter, sendRawToUsbPrinter, PrinterConnectionError, bytesToHex } from "@/lib/printing/printerServerClient";
 import { useDeviceSettingsStore } from "@/lib/store/useDeviceSettingsStore";
 import { usePrintQueueStore } from "@/lib/store/usePrintQueueStore";
 import { useSystemStatusStore } from "@/lib/store/useSystemStatusStore";
 import { useSystemLogStore } from "@/lib/store/useSystemLogStore";
+import { loadLogoRaster } from "@/lib/printing/logoRaster";
 
 /**
  * Prints a completed order's receipt through the Local Printer Server (see
@@ -30,22 +31,25 @@ export async function printOrderReceipt(opts: {
   skipQueue?: boolean;
 }): Promise<void> {
   const device = useDeviceSettingsStore.getState();
-  if (!device.printServerHost || !device.printerIp) {
+  if (!device.printServerHost || (device.printerConnectionType === "usb" ? !device.usbPrinterName : !device.printerIp)) {
     throw new PrinterConnectionError("Printer not configured yet — set it up in Settings → Devices.");
   }
 
-  const receiptBytes = buildReceiptBytes(opts.order, opts.settings, opts.branchName, opts.locale);
+  const logoRaster = opts.settings.logo
+    ? await loadLogoRaster(opts.settings.logo, device.paperWidth === "58" ? 384 : 576)
+    : undefined;
+  const receiptBytes = buildReceiptBytes(opts.order, opts.settings, opts.branchName, opts.locale, logoRaster);
   const drawerBytes = opts.openDrawer ? buildDrawerKickBytes() : new Uint8Array();
   const combined = new Uint8Array(receiptBytes.length + drawerBytes.length);
   combined.set(receiptBytes, 0);
   combined.set(drawerBytes, receiptBytes.length);
 
   try {
-    await sendRawToPrinter(
-      { host: device.printServerHost, port: device.printServerPort },
-      { ip: device.printerIp, port: device.printerPort },
-      combined
-    );
+    if (device.printerConnectionType === "usb") {
+      await sendRawToUsbPrinter({ host: device.printServerHost, port: device.printServerPort }, device.usbPrinterName, combined);
+    } else {
+      await sendRawToPrinter({ host: device.printServerHost, port: device.printServerPort }, { ip: device.printerIp, port: device.printerPort }, combined);
+    }
     useSystemStatusStore.getState().set({ lastPrintAt: new Date().toISOString(), lastPrintError: null });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not reach the printer.";
@@ -56,6 +60,8 @@ export async function printOrderReceipt(opts: {
         dataHex: bytesToHex(combined),
         printerIp: device.printerIp,
         printerPort: device.printerPort,
+        printerConnectionType: device.printerConnectionType,
+        usbPrinterName: device.usbPrinterName,
       });
       useSystemLogStore.getState().log(`Receipt queued for retry: Order #${opts.order.orderNumber} (${message})`, "warning");
     }
@@ -80,18 +86,18 @@ export async function printShiftReport(opts: {
   skipQueue?: boolean;
 }): Promise<void> {
   const device = useDeviceSettingsStore.getState();
-  if (!device.printServerHost || !device.printerIp) {
+  if (!device.printServerHost || (device.printerConnectionType === "usb" ? !device.usbPrinterName : !device.printerIp)) {
     throw new PrinterConnectionError("Printer not configured yet — set it up in Settings → Devices.");
   }
 
   const reportBytes = buildShiftReportBytes(opts.shift, opts.settings, opts.branchName, opts.locale);
 
   try {
-    await sendRawToPrinter(
-      { host: device.printServerHost, port: device.printServerPort },
-      { ip: device.printerIp, port: device.printerPort },
-      reportBytes
-    );
+    if (device.printerConnectionType === "usb") {
+      await sendRawToUsbPrinter({ host: device.printServerHost, port: device.printServerPort }, device.usbPrinterName, reportBytes);
+    } else {
+      await sendRawToPrinter({ host: device.printServerHost, port: device.printServerPort }, { ip: device.printerIp, port: device.printerPort }, reportBytes);
+    }
     useSystemStatusStore.getState().set({ lastPrintAt: new Date().toISOString(), lastPrintError: null });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not reach the printer.";
@@ -102,6 +108,8 @@ export async function printShiftReport(opts: {
         dataHex: bytesToHex(reportBytes),
         printerIp: device.printerIp,
         printerPort: device.printerPort,
+        printerConnectionType: device.printerConnectionType,
+        usbPrinterName: device.usbPrinterName,
       });
       useSystemLogStore.getState().log(`Shift report queued for retry: ${opts.shift.cashierName} (${message})`, "warning");
     }

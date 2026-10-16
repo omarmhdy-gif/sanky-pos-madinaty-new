@@ -38,7 +38,7 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/15 text-destructive">
           <AlertTriangle className="h-6 w-6" />
         </div>
-        <p className="text-sm font-medium">Couldn't connect to the database</p>
+        <p className="text-sm font-medium">Couldn&apos;t connect to the database</p>
         <p className="max-w-md break-words text-xs text-muted-foreground">{branchesError}</p>
         <button
           onClick={() => fetchBranches()}

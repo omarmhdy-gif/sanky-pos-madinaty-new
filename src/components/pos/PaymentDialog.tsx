@@ -108,7 +108,12 @@ export function PaymentDialog({
   // Never lets a printer failure block or freeze checkout — the order is
   // already completed by the time this runs; printing is a best-effort
   // side effect the cashier can always retry via the button below.
-  const handlePrint = async (order: Order, openDrawer: boolean) => {
+  const handlePrint = async (order: Order, openDrawer: boolean, showMissingNotice = true) => {
+    const printer = useDeviceSettingsStore.getState();
+    if (!printer.printServerHost || (printer.printerConnectionType === "usb" ? !printer.usbPrinterName : !printer.printerIp)) {
+      if (showMissingNotice) toast(`${t.devices.receiptPrinter}: ${t.devices.printerOffline}`, "info");
+      return;
+    }
     setPrinting(true);
     try {
       await printOrderReceipt({ order, settings, branchName, locale, openDrawer });
@@ -365,7 +370,7 @@ export function PaymentDialog({
       cart.clearCart();
       toast(`${t.pos.orderComplete} #${order.orderNumber}`, "success");
       if (deviceSettings.autoPrintReceipt) {
-        handlePrint(order, paymentMethod === "cash" && deviceSettings.autoOpenDrawer);
+        handlePrint(order, paymentMethod === "cash" && deviceSettings.autoOpenDrawer, false);
       }
     } catch (err) {
       // Offline protection: a network-shaped failure doesn't lose the sale
@@ -384,7 +389,7 @@ export function PaymentDialog({
         setQueuedOffline(true);
         cart.clearCart();
         if (deviceSettings.autoPrintReceipt) {
-          handlePrint(previewOrder, paymentMethod === "cash" && deviceSettings.autoOpenDrawer);
+          handlePrint(previewOrder, paymentMethod === "cash" && deviceSettings.autoOpenDrawer, false);
         }
       } else {
         toast(err instanceof Error ? err.message : "Failed to complete order", "error");

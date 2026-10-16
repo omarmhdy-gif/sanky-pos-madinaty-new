@@ -12,6 +12,8 @@ import {
   testPrinterConnection,
   discoverDeviceServer,
   sendRawToPrinter,
+  sendRawToUsbPrinter,
+  discoverUsbPrinters,
   hexToBytes,
   DEFAULT_DEVICE_SERVER_PORT,
   MDNS_HOSTNAME,
@@ -56,11 +58,11 @@ async function flushPrintQueue() {
   // produces a wall of identical failures for nothing.
   for (const item of [...queue].reverse()) {
     try {
-      await sendRawToPrinter(
-        { host: device.printServerHost, port: device.printServerPort },
-        { ip: item.printerIp, port: item.printerPort },
-        hexToBytes(item.dataHex)
-      );
+      if (item.printerConnectionType === "usb" && item.usbPrinterName) {
+        await sendRawToUsbPrinter({ host: device.printServerHost, port: device.printServerPort }, item.usbPrinterName, hexToBytes(item.dataHex));
+      } else {
+        await sendRawToPrinter({ host: device.printServerHost, port: device.printServerPort }, { ip: item.printerIp, port: item.printerPort }, hexToBytes(item.dataHex));
+      }
       remove(item.id);
       useSystemLogStore.getState().log(`Queued receipt printed: ${item.label}`, "info");
       useSystemStatusStore.getState().set({ lastPrintAt: new Date().toISOString(), lastPrintError: null });
@@ -130,7 +132,14 @@ export function SystemMonitor() {
       // Printer: only meaningful to check once the Device Server itself is
       // reachable (it's the one that actually opens the TCP connection).
       let printerState: ConnectionState = "unknown";
-      if (deviceServerState === "online" && device.printerIp) {
+      if (deviceServerState === "online" && device.printerConnectionType === "usb" && device.usbPrinterName) {
+        try {
+          const printers = await discoverUsbPrinters({ host: device.printServerHost, port: device.printServerPort });
+          printerState = printers.some((printer) => printer.name === device.usbPrinterName) ? "online" : "offline";
+        } catch {
+          printerState = "offline";
+        }
+      } else if (deviceServerState === "online" && device.printerConnectionType === "network" && device.printerIp) {
         const fresh = useDeviceSettingsStore.getState();
         const online = await testPrinterConnection(
           { host: fresh.printServerHost, port: fresh.printServerPort },

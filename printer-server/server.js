@@ -22,6 +22,9 @@ const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const execFileAsync = promisify(execFile);
 const selfsigned = require("selfsigned");
 const { Bonjour } = require("bonjour-service");
 
@@ -44,6 +47,60 @@ const MDNS_HOST_LABEL = "sanky-device";
 const MDNS_HOSTNAME = `${MDNS_HOST_LABEL}.local`;
 const SERVER_FRIENDLY_NAME = "Sanky Device Server";
 const SERVER_VERSION = "1.9.1";
+
+async function listWindowsPrinters() {
+  if (process.platform !== "win32") return [];
+  const command = "Get-Printer | Select-Object Name,PortName,DriverName | ConvertTo-Json -Compress";
+  const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { windowsHide: true, timeout: 10000, maxBuffer: 1024 * 1024 });
+  const rows = JSON.parse(stdout || "[]");
+  return (Array.isArray(rows) ? rows : [rows])
+    .filter((p) => p && p.Name && /^USB/i.test(p.PortName || ""))
+    .map((p) => ({ name: p.Name, portName: p.PortName || "", driverName: p.DriverName || "" }));
+}
+
+async function printWindowsRaw(printerName, dataHex) {
+  const printers = await listWindowsPrinters();
+  if (!printers.some((p) => p.name === printerName)) throw new Error("The selected Windows printer is no longer installed.");
+  const dataPath = path.join(os.tmpdir(), `sanky-print-${process.pid}-${Date.now()}.bin`);
+  await fs.promises.writeFile(dataPath, Buffer.from(dataHex, "hex"));
+  const powershell = String.raw`
+$ErrorActionPreference = 'Stop'
+$source = @'
+using System;
+using System.Runtime.InteropServices;
+public static class SankyRawPrinter {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public struct DOC_INFO_1 { public string pDocName; public string pOutputFile; public string pDataType; }
+  [DllImport("winspool.drv", SetLastError=true, CharSet=CharSet.Unicode)] static extern bool OpenPrinter(string name, out IntPtr handle, IntPtr defaults);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool ClosePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true, CharSet=CharSet.Unicode)] static extern int StartDocPrinter(IntPtr handle, int level, ref DOC_INFO_1 info);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndDocPrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool StartPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool EndPagePrinter(IntPtr handle);
+  [DllImport("winspool.drv", SetLastError=true)] static extern bool WritePrinter(IntPtr handle, byte[] bytes, int count, out int written);
+  public static int Send(string name, byte[] bytes) {
+    IntPtr handle; if (!OpenPrinter(name, out handle, IntPtr.Zero)) throw new Exception("OpenPrinter failed: " + Marshal.GetLastWin32Error());
+    try { var info = new DOC_INFO_1 { pDocName="Sanky POS Receipt", pOutputFile=null, pDataType="RAW" }; if (StartDocPrinter(handle, 1, ref info) == 0) throw new Exception("StartDocPrinter failed: " + Marshal.GetLastWin32Error());
+      try { if (!StartPagePrinter(handle)) throw new Exception("StartPagePrinter failed: " + Marshal.GetLastWin32Error()); int written; if (!WritePrinter(handle, bytes, bytes.Length, out written) || written != bytes.Length) throw new Exception("WritePrinter failed: " + Marshal.GetLastWin32Error()); EndPagePrinter(handle); return written; }
+      finally { EndDocPrinter(handle); }
+    } finally { ClosePrinter(handle); }
+  }
+}
+'@
+Add-Type -TypeDefinition $source
+$bytes = [IO.File]::ReadAllBytes($env:SANKY_USB_FILE)
+[SankyRawPrinter]::Send($env:SANKY_USB_NAME, $bytes) | Out-Null
+`;
+  try {
+    await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", powershell], {
+      windowsHide: true,
+      timeout: 30000,
+      maxBuffer: 1024 * 1024,
+      env: { ...process.env, SANKY_USB_NAME: printerName, SANKY_USB_FILE: dataPath },
+    });
+  } finally {
+    await fs.promises.unlink(dataPath).catch(() => {});
+  }
+}
 
 const START_TIME = Date.now();
 
@@ -632,6 +689,32 @@ async function handleRequest(req, res) {
     const printers = await scanForPrinters(portParam);
     log("connection", `Scan complete in ${Date.now() - startedAt}ms — found ${printers.length} device(s) on port ${portParam}`);
     return sendJson(res, 200, { printers });
+  }
+
+  if (req.method === "GET" && url.pathname === "/relay/usb-printers") {
+    try {
+      const printers = await listWindowsPrinters();
+      return sendJson(res, 200, { printers });
+    } catch (err) {
+      log("error", `USB printer discovery failed: ${err.message}`);
+      return sendJson(res, 500, { error: "Could not list Windows printers." });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/relay/print-usb") {
+    const body = await readJsonBody(req);
+    if (process.platform !== "win32") return sendJson(res, 501, { success: false, error: "USB printing is available on the Windows Printer Server only." });
+    if (typeof body.name !== "string" || !body.name.trim() || !isValidHexPayload(body.dataHex)) {
+      return sendJson(res, 400, { success: false, error: "A Windows printer name and valid ESC/POS payload are required." });
+    }
+    try {
+      await printWindowsRaw(body.name, body.dataHex);
+      log("print", `USB print SUCCESS (${Math.floor(body.dataHex.length / 2)} bytes to ${body.name})`);
+      return sendJson(res, 200, { success: true });
+    } catch (err) {
+      log("error", `USB print FAILED (${body.name}): ${err.message}`);
+      return sendJson(res, 200, { success: false, error: err.message });
+    }
   }
 
   if (req.method === "POST" && url.pathname === "/relay/test-connection") {

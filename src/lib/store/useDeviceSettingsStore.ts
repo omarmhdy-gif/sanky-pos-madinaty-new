@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { getSafeStorage } from "@/lib/store/storage";
 
 export type PaperWidth = "58" | "80";
+export type PrinterConnectionType = "network" | "usb";
 
 interface DeviceSettingsStore {
   // Local Printer Server — a small program (printer-server/) run on a PC on
@@ -14,6 +15,8 @@ interface DeviceSettingsStore {
   printerIp: string;
   printerPort: number;
   printerName: string;
+  printerConnectionType: PrinterConnectionType;
+  usbPrinterName: string;
   paperWidth: PaperWidth;
   autoPrintReceipt: boolean;
   autoOpenDrawer: boolean;
@@ -39,6 +42,8 @@ interface DeviceSettingsStore {
   setPrinterIp: (v: string) => void;
   setPrinterPort: (v: number) => void;
   setPrinterName: (v: string) => void;
+  setPrinterConnectionType: (v: PrinterConnectionType) => void;
+  setUsbPrinterName: (v: string) => void;
   setPaperWidth: (v: PaperWidth) => void;
   setAutoPrintReceipt: (v: boolean) => void;
   setAutoOpenDrawer: (v: boolean) => void;
@@ -58,6 +63,8 @@ export const useDeviceSettingsStore = create<DeviceSettingsStore>()(
       printerIp: "",
       printerPort: 9100,
       printerName: "",
+      printerConnectionType: "network",
+      usbPrinterName: "",
       paperWidth: "80",
       autoPrintReceipt: true,
       autoOpenDrawer: false,
@@ -69,6 +76,8 @@ export const useDeviceSettingsStore = create<DeviceSettingsStore>()(
       setPrinterIp: (v) => set({ printerIp: v }),
       setPrinterPort: (v) => set({ printerPort: v }),
       setPrinterName: (v) => set({ printerName: v }),
+      setPrinterConnectionType: (v) => set({ printerConnectionType: v }),
+      setUsbPrinterName: (v) => set({ usbPrinterName: v }),
       setPaperWidth: (v) => set({ paperWidth: v }),
       setAutoPrintReceipt: (v) => set({ autoPrintReceipt: v }),
       setAutoOpenDrawer: (v) => set({ autoOpenDrawer: v }),
@@ -79,8 +88,8 @@ export const useDeviceSettingsStore = create<DeviceSettingsStore>()(
     {
       name: "sanky-pos-device-settings",
       storage: createJSONStorage(getSafeStorage),
-      // v4: added lastKnownCertGeneratedAt to detect certificate changes.
-      version: 4,
+      // v5 adds a local Windows USB printer selection.
+      version: 5,
       migrate: (persisted, version) => {
         const state = persisted as Partial<DeviceSettingsStore>;
         if (version < 2) {
@@ -92,6 +101,10 @@ export const useDeviceSettingsStore = create<DeviceSettingsStore>()(
         }
         if (version < 4) {
           state.lastKnownCertGeneratedAt = null;
+        }
+        if (version < 5) {
+          state.printerConnectionType = "network";
+          state.usbPrinterName = "";
         }
         return state;
       },
