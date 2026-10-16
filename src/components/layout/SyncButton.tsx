@@ -30,7 +30,7 @@ export function SyncButton() {
         const pending = useOrderQueueStore.getState().queue.length;
         toast(
           pending
-            ? (isArabic ? `تم تحديث بيانات الفرع. يوجد ${pending} طلب بيع ينتظر تفعيل مزامنة الطلبات.` : `Branch data refreshed. ${pending} offline sale(s) still need order sync enabled.`)
+            ? (isArabic ? `تم تحديث بيانات الفرع. ${pending} طلب بيع محفوظ على الجهاز وسيُعاد إرساله عند عودة الاتصال.` : `Branch data refreshed. ${pending} offline sale(s) will retry automatically when online.`)
             : (isArabic ? "تمت مزامنة بيانات الفرع." : "Branch data synced."),
           pending ? "info" : "success"
         );
