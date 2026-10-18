@@ -58,8 +58,13 @@ export default function LoginPage() {
         // nothing), still route into an AppShell page so AuthGuard's
         // "no access" screen (with a Log out button) renders instead of
         // silently doing nothing.
-        const fallback = defaultRouteFor(user) ?? "/dashboard";
-        const destination = returnPath && canAccess(user, returnPath) ? returnPath : fallback;
+        const isDesktopCashier = Boolean(window.sankyDesktop?.isDesktop);
+        const fallback = isDesktopCashier ? "/pos/" : defaultRouteFor(user) ?? "/dashboard";
+        const destination = isDesktopCashier
+          ? "/pos/"
+          : returnPath && canAccess(user, returnPath)
+            ? returnPath
+            : fallback;
         window.setTimeout(() => router.replace(destination), 900);
         return;
       }

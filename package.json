@@ -1,13 +1,18 @@
 {
   "name": "sanky-pos",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Sanky POS - Coffee shop point of sale system",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omarmhdy-gif/sanky-pos-madinaty-new.git"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "desktop:build": "npm run build && electron-builder --win dir --config.directories.output=release && electron-builder --prepackaged release/win-unpacked --win nsis --config.directories.output=release-installer && electron-builder --prepackaged release/win-unpacked --win portable --config.directories.output=release-portable"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -21,6 +26,7 @@
     "@supabase/supabase-js": "^2.47.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "exceljs": "^4.4.0",
     "lucide-react": "^0.469.0",
     "next": "15.5.20",
@@ -37,11 +43,64 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3",
     "eslint": "^9.17.0",
     "eslint-config-next": "15.5.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "5.8.2"
+  },
+  "main": "desktop/main.cjs",
+  "build": {
+    "asar": true,
+    "nsis": {
+      "allowToChangeInstallationDirectory": true,
+      "oneClick": false,
+      "perMachine": true,
+      "allowElevation": true,
+      "installerIcon": "desktop/sanky.ico",
+      "uninstallerIcon": "desktop/sanky.ico",
+      "installerHeaderIcon": "desktop/sanky.ico",
+      "include": "desktop/installer.nsh"
+    },
+    "directories": {
+      "output": "release"
+    },
+    "productName": "Sanky POS",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "omarmhdy-gif",
+        "repo": "sanky-pos-madinaty-new",
+        "releaseType": "release"
+      }
+    ],
+    "files": [
+      "desktop/main.cjs",
+      "desktop/preload.cjs",
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop/windows-cashier-setup.ps1",
+        "to": "windows-cashier-setup.ps1"
+      },
+      {
+        "from": "desktop/windows-assigned-access-bridge.ps1",
+        "to": "windows-assigned-access-bridge.ps1"
+      }
+    ],
+    "win": {
+      "icon": "desktop/sanky.ico",
+      "artifactName": "Sanky-POS-${version}-${arch}.${ext}",
+      "target": "dir"
+    },
+    "appId": "com.sanky.pos"
+  },
+  "allowScripts": {
+    "electron@44.7.2": true
   }
 }

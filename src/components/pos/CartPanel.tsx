@@ -13,6 +13,7 @@ import { toast } from "@/components/ui/toast";
 import { createCustomer, searchCustomers, updateCustomer, fetchCustomerById, fetchPromoCodes } from "@/lib/supabase/api";
 import type { PromoCode } from "@/lib/types";
 import { useBranchStore } from "@/lib/store/useBranchStore";
+import { useTableStore } from "@/lib/store/useTableStore";
 
 export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const { t, locale } = useI18n();
@@ -23,6 +24,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
     removeLine,
     clearCart,
     orderType,
+    tableId,
     discountPercent,
     setDiscountPercent,
     discountFixedAmount,
@@ -164,6 +166,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
     holdOrder({
       lines,
       orderType,
+      tableId,
       tableNumber,
       customerName,
       customerId,
@@ -244,6 +247,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
         <div className="flex items-center gap-2">
           <ShoppingBag className="h-5 w-5 text-primary" />
           <h2 className="font-semibold">{t.pos.cart}</h2>
+          {tableNumber && orderType === "dine_in" && <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">{tableNumber}</span>}
           {itemCount > 0 && (
             <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">
               {itemCount}
@@ -413,6 +417,10 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
                 variant="destructive"
                 className="flex-1"
                 onClick={() => {
+                  if (tableId) {
+                    useTableStore.getState().clearTableOrder(tableId);
+                    useTableStore.getState().releaseTable(tableId);
+                  }
                   clearCart();
                   setConfirmClear(false);
                 }}

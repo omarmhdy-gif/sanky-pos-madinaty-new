@@ -5,6 +5,7 @@ import { genId } from "@/lib/utils";
 interface CartStore {
   lines: CartLine[];
   orderType: OrderType;
+  tableId?: string;
   tableNumber?: string;
   customerName?: string;
   customerId?: string;
@@ -24,6 +25,7 @@ interface CartStore {
   setLineNote: (lineId: string, note: string) => void;
   clearCart: () => void;
   setOrderType: (t: OrderType) => void;
+  setTableId: (v: string | undefined) => void;
   setTableNumber: (v: string) => void;
   setCustomerName: (v: string) => void;
   setCustomerId: (v: string | undefined) => void;
@@ -112,9 +114,10 @@ export const useCartStore = create<CartStore>()((set, get) => ({
     })),
 
   clearCart: () =>
-    set({ lines: [], discountPercent: 0, discountFixedAmount: 0, promoCode: undefined, tableNumber: undefined, customerName: undefined, customerId: undefined }),
+    set({ lines: [], orderType: "takeaway", tableId: undefined, discountPercent: 0, discountFixedAmount: 0, promoCode: undefined, tableNumber: undefined, customerName: undefined, customerId: undefined }),
 
   setOrderType: (t) => set({ orderType: t }),
+  setTableId: (v) => set({ tableId: v }),
   setTableNumber: (v) => set({ tableNumber: v }),
   setCustomerName: (v) => set({ customerName: v }),
   setCustomerId: (v) => set({ customerId: v }),

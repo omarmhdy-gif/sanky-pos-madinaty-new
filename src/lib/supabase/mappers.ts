@@ -341,6 +341,7 @@ export function fromSettingsRow(row: any): ShopSettings {
     externalPaymentName: row.external_payment_name ?? undefined,
     externalPaymentIcon: row.external_payment_icon ?? undefined,
     externalPaymentMethods: row.external_payment_methods ?? undefined,
+    diningLayout: row.dining_layout ?? undefined,
   };
 }
 
@@ -362,6 +363,7 @@ export function toSettingsPatchRow(patch: Partial<ShopSettings>) {
   if (patch.externalPaymentName !== undefined) row.external_payment_name = patch.externalPaymentName;
   if (patch.externalPaymentIcon !== undefined) row.external_payment_icon = patch.externalPaymentIcon;
   if (patch.externalPaymentMethods !== undefined) row.external_payment_methods = patch.externalPaymentMethods;
+  if (patch.diningLayout !== undefined) row.dining_layout = patch.diningLayout;
   return row;
 }
 

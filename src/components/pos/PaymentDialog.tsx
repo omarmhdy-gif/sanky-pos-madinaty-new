@@ -9,6 +9,7 @@ import { useCartStore, lineTotal, computeDiscountAmount } from "@/lib/store/useC
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
+import { useTableStore } from "@/lib/store/useTableStore";
 import { useDeviceSettingsStore } from "@/lib/store/useDeviceSettingsStore";
 import { useOrderQueueStore } from "@/lib/store/useOrderQueueStore";
 import { useSystemLogStore } from "@/lib/store/useSystemLogStore";
@@ -110,7 +111,7 @@ export function PaymentDialog({
   // side effect the cashier can always retry via the button below.
   const handlePrint = async (order: Order, openDrawer: boolean, showMissingNotice = true) => {
     const printer = useDeviceSettingsStore.getState();
-    if (!printer.printServerHost || (printer.printerConnectionType === "usb" ? !printer.usbPrinterName : !printer.printerIp)) {
+    if ((!window.sankyDesktop?.isDesktop && !printer.printServerHost) || (printer.printerConnectionType === "usb" ? !printer.usbPrinterName : !printer.printerIp)) {
       if (showMissingNotice) toast(`${t.devices.receiptPrinter}: ${t.devices.printerOffline}`, "info");
       return;
     }
@@ -367,6 +368,10 @@ export function PaymentDialog({
 
       setCompletedOrder(order);
       setQueuedOffline(false);
+      if (cart.tableId) {
+        useTableStore.getState().clearTableOrder(cart.tableId);
+        useTableStore.getState().releaseTable(cart.tableId);
+      }
       cart.clearCart();
       toast(`${t.pos.orderComplete} #${order.orderNumber}`, "success");
       if (deviceSettings.autoPrintReceipt) {
@@ -387,6 +392,10 @@ export function PaymentDialog({
         const previewOrder: Order = { ...payload, id: "pending", orderNumber: 0, branchId: currentBranchId };
         setCompletedOrder(previewOrder);
         setQueuedOffline(true);
+        if (cart.tableId) {
+          useTableStore.getState().clearTableOrder(cart.tableId);
+          useTableStore.getState().releaseTable(cart.tableId);
+        }
         cart.clearCart();
         if (deviceSettings.autoPrintReceipt) {
           handlePrint(previewOrder, paymentMethod === "cash" && deviceSettings.autoOpenDrawer, false);

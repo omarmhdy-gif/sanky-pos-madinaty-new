@@ -52,13 +52,20 @@ async function flushPrintQueue() {
   const { queue, remove, markAttempt } = usePrintQueueStore.getState();
   if (queue.length === 0) return;
   const device = useDeviceSettingsStore.getState();
-  if (!device.printServerHost) return;
+  const desktop = typeof window !== "undefined" ? window.sankyDesktop : undefined;
+  if (!desktop && !device.printServerHost) return;
   // Oldest first, and stop at the first failure — if the printer's still
   // down, hammering through the rest of the queue just burns time and
   // produces a wall of identical failures for nothing.
   for (const item of [...queue].reverse()) {
     try {
-      if (item.printerConnectionType === "usb" && item.usbPrinterName) {
+      if (desktop) {
+        await desktop.printer.print({
+          connectionType: item.printerConnectionType ?? "network",
+          ...(item.printerConnectionType === "usb" ? { usbPrinterName: item.usbPrinterName } : { ip: item.printerIp, port: item.printerPort }),
+          dataHex: item.dataHex,
+        });
+      } else if (item.printerConnectionType === "usb" && item.usbPrinterName) {
         await sendRawToUsbPrinter({ host: device.printServerHost, port: device.printServerPort }, item.usbPrinterName, hexToBytes(item.dataHex));
       } else {
         await sendRawToPrinter({ host: device.printServerHost, port: device.printServerPort }, { ip: item.printerIp, port: item.printerPort }, hexToBytes(item.dataHex));
@@ -102,6 +109,7 @@ export function SystemMonitor() {
       const statusStore = useSystemStatusStore.getState();
       const prev = useSystemStatusStore.getState();
       const device = useDeviceSettingsStore.getState();
+      const desktop = window.sankyDesktop?.isDesktop ? window.sankyDesktop : undefined;
 
       // Internet: navigator.onLine is a fast, real (if imperfect) signal
       // straight from the OS network stack.
@@ -118,12 +126,12 @@ export function SystemMonitor() {
       // Device Server: check the currently-connected address; if it's
       // unreachable (or never configured) and auto-reconnect is on,
       // silently try to rediscover it before giving up for this tick.
-      let deviceServerState: ConnectionState = "unknown";
-      if (device.printServerHost) {
+      let deviceServerState: ConnectionState = desktop ? "online" : "unknown";
+      if (!desktop && device.printServerHost) {
         const health = await checkHealthLatency({ host: device.printServerHost, port: device.printServerPort });
         deviceServerState = health.ok ? "online" : "offline";
       }
-      if (deviceServerState !== "online" && device.autoReconnect) {
+      if (!desktop && deviceServerState !== "online" && device.autoReconnect) {
         const reconnected = await tryReconnectDeviceServer();
         if (reconnected) deviceServerState = "online";
       }
@@ -132,7 +140,16 @@ export function SystemMonitor() {
       // Printer: only meaningful to check once the Device Server itself is
       // reachable (it's the one that actually opens the TCP connection).
       let printerState: ConnectionState = "unknown";
-      if (deviceServerState === "online" && device.printerConnectionType === "usb" && device.usbPrinterName) {
+      if (desktop && device.printerConnectionType === "usb" && device.usbPrinterName) {
+        try {
+          const printers = await desktop.printer.listUsb();
+          printerState = printers.some((printer) => printer.name === device.usbPrinterName) ? "online" : "offline";
+        } catch {
+          printerState = "offline";
+        }
+      } else if (desktop && device.printerConnectionType === "network" && device.printerIp) {
+        printerState = await desktop.printer.testNetwork(device.printerIp, device.printerPort) ? "online" : "offline";
+      } else if (deviceServerState === "online" && device.printerConnectionType === "usb" && device.usbPrinterName) {
         try {
           const printers = await discoverUsbPrinters({ host: device.printServerHost, port: device.printServerPort });
           printerState = printers.some((printer) => printer.name === device.usbPrinterName) ? "online" : "offline";
@@ -160,7 +177,7 @@ export function SystemMonitor() {
       // Retry queues silently — never interrupts the cashier, no dialogs,
       // no blocking. Print queue needs the printer reachable; order queue
       // needs Supabase reachable.
-      if (deviceServerState === "online" && printerState === "online") {
+      if (printerState === "online") {
         await flushPrintQueue().catch(() => {});
       }
       if (supabaseState === "online") {

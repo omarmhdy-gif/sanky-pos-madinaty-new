@@ -9,6 +9,7 @@ interface HeldOrdersStore {
   holdOrder: (data: {
     lines: CartLine[];
     orderType: OrderType;
+    tableId?: string;
     tableNumber?: string;
     customerName?: string;
     customerId?: string;

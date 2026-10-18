@@ -23,6 +23,7 @@ export function HeldOrdersDialog({ open, onOpenChange }: { open: boolean; onOpen
     setCartState({
       lines: order.lines,
       orderType: order.orderType,
+      tableId: order.tableId,
       tableNumber: order.tableNumber,
       customerName: order.customerName,
       customerId: order.customerId,

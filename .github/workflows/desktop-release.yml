@@ -1,0 +1,43 @@
+name: Publish Windows POS updates
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "desktop/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.*"
+      - ".github/workflows/desktop-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require Supabase build configuration
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:NEXT_PUBLIC_SUPABASE_URL) -or [string]::IsNullOrWhiteSpace($env:NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+            throw "Set the repository variables NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY before publishing desktop updates."
+          }
+      - run: npm ci
+      - run: npm run build
+      - name: Create a unique Windows release version
+        shell: pwsh
+        run: npm version "1.1.${{ github.run_number }}" --no-git-tag-version
+      - run: npx electron-builder --win nsis --x64 --publish always

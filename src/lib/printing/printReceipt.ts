@@ -31,8 +31,9 @@ export async function printOrderReceipt(opts: {
   skipQueue?: boolean;
 }): Promise<void> {
   const device = useDeviceSettingsStore.getState();
-  if (!device.printServerHost || (device.printerConnectionType === "usb" ? !device.usbPrinterName : !device.printerIp)) {
-    throw new PrinterConnectionError("Printer not configured yet — set it up in Settings → Devices.");
+  const desktop = typeof window !== "undefined" ? window.sankyDesktop : undefined;
+  if ((!desktop && !device.printServerHost) || (device.printerConnectionType === "usb" ? !device.usbPrinterName : !device.printerIp)) {
+    throw new PrinterConnectionError("Printer not configured yet — open Printer in the POS screen to set it up.");
   }
 
   const logoRaster = opts.settings.logo
@@ -45,7 +46,13 @@ export async function printOrderReceipt(opts: {
   combined.set(drawerBytes, receiptBytes.length);
 
   try {
-    if (device.printerConnectionType === "usb") {
+    if (desktop) {
+      await desktop.printer.print({
+        connectionType: device.printerConnectionType,
+        ...(device.printerConnectionType === "usb" ? { usbPrinterName: device.usbPrinterName } : { ip: device.printerIp, port: device.printerPort }),
+        dataHex: bytesToHex(combined),
+      });
+    } else if (device.printerConnectionType === "usb") {
       await sendRawToUsbPrinter({ host: device.printServerHost, port: device.printServerPort }, device.usbPrinterName, combined);
     } else {
       await sendRawToPrinter({ host: device.printServerHost, port: device.printServerPort }, { ip: device.printerIp, port: device.printerPort }, combined);
@@ -86,14 +93,21 @@ export async function printShiftReport(opts: {
   skipQueue?: boolean;
 }): Promise<void> {
   const device = useDeviceSettingsStore.getState();
-  if (!device.printServerHost || (device.printerConnectionType === "usb" ? !device.usbPrinterName : !device.printerIp)) {
-    throw new PrinterConnectionError("Printer not configured yet — set it up in Settings → Devices.");
+  const desktop = typeof window !== "undefined" ? window.sankyDesktop : undefined;
+  if ((!desktop && !device.printServerHost) || (device.printerConnectionType === "usb" ? !device.usbPrinterName : !device.printerIp)) {
+    throw new PrinterConnectionError("Printer not configured yet — open Printer in the POS screen to set it up.");
   }
 
   const reportBytes = buildShiftReportBytes(opts.shift, opts.settings, opts.branchName, opts.locale);
 
   try {
-    if (device.printerConnectionType === "usb") {
+    if (desktop) {
+      await desktop.printer.print({
+        connectionType: device.printerConnectionType,
+        ...(device.printerConnectionType === "usb" ? { usbPrinterName: device.usbPrinterName } : { ip: device.printerIp, port: device.printerPort }),
+        dataHex: bytesToHex(reportBytes),
+      });
+    } else if (device.printerConnectionType === "usb") {
       await sendRawToUsbPrinter({ host: device.printServerHost, port: device.printServerPort }, device.usbPrinterName, reportBytes);
     } else {
       await sendRawToPrinter({ host: device.printServerHost, port: device.printServerPort }, { ip: device.printerIp, port: device.printerPort }, reportBytes);

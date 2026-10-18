@@ -65,7 +65,8 @@ create table shop_settings (
   phone text,
   external_payment_name jsonb not null default '{"en":"Talabat","ar":"طلبات"}'::jsonb,
   external_payment_icon text not null default 'Bike',
-  external_payment_methods jsonb not null default '[{"id":"talabat","name":{"en":"Talabat","ar":"طلبات"},"icon":"Bike"}]'::jsonb
+  external_payment_methods jsonb not null default '[{"id":"talabat","name":{"en":"Talabat","ar":"طلبات"},"icon":"Bike"}]'::jsonb,
+  dining_layout jsonb
 );
 
 create table staff (

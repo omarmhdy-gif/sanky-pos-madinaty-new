@@ -7,6 +7,7 @@ import { ShopLogo } from "@/components/layout/ShopLogo";
 import { makeLogoBackgroundTransparent } from "@/lib/branding/transparentLogo";
 import { MenuQrManager } from "@/components/settings/MenuQrManager";
 import { ExternalPaymentManager } from "@/components/settings/ExternalPaymentManager";
+import { TableManager } from "@/components/settings/TableManager";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -315,6 +316,8 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">
           {t.settings.subtitle}
         </p>
+
+        <TableManager />
 
         {/* General */}
         <Card>

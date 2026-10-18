@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { CategoryTabs } from "@/components/pos/CategoryTabs";
 import { ProductGrid } from "@/components/pos/ProductGrid";
@@ -15,7 +15,7 @@ import { useI18n } from "@/lib/i18n";
 import { useBarcodeScanner } from "@/hooks/useBarcodeScanner";
 import { toast } from "@/components/ui/toast";
 import type { Product } from "@/lib/types";
-import { ShoppingBag } from "lucide-react";
+import { Printer, ShoppingBag, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StartupValidation } from "@/components/pos/StartupValidation";
 import { InventoryQualityCheckDialog } from "@/components/pos/InventoryQualityCheckDialog";
@@ -25,6 +25,8 @@ import { StartShiftDialog } from "@/components/shifts/StartShiftDialog";
 import { ShiftDialog } from "@/components/shifts/ShiftDialog";
 import { StaffAttendanceButton } from "@/components/attendance/StaffAttendanceButton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DesktopPrinterDialog } from "@/components/pos/DesktopPrinterDialog";
+import { useTableStore } from "@/lib/store/useTableStore";
 
 export default function PosPage() {
   const { t, locale } = useI18n();
@@ -35,6 +37,20 @@ export default function PosPage() {
   const currentUser = useAuthStore((s) => s.currentUser);
   const addLine = useCartStore((s) => s.addLine);
   const cartLines = useCartStore((s) => s.lines);
+  const cartTableId = useCartStore((s) => s.tableId);
+  const cartDiscountPercent = useCartStore((s) => s.discountPercent);
+  const cartDiscountFixedAmount = useCartStore((s) => s.discountFixedAmount);
+  const cartPromoCode = useCartStore((s) => s.promoCode);
+  const cartCustomerName = useCartStore((s) => s.customerName);
+  const cartCustomerId = useCartStore((s) => s.customerId);
+  const setCartState = useCartStore.setState;
+  const diningTables = useTableStore((s) => s.tables);
+  const diningSections = useTableStore((s) => s.sections);
+  const occupiedTableIds = useTableStore((s) => s.occupiedTableIds);
+  const tableOrders = useTableStore((s) => s.tableOrders);
+  const occupyTable = useTableStore((s) => s.occupyTable);
+  const saveTableOrder = useTableStore((s) => s.saveTableOrder);
+  const moveTable = useTableStore((s) => s.moveTable);
 
   // Browsing/scanning/building a cart never requires a shift — only
   // charging does (gated in handleCharge below). Closing a shift no longer
@@ -62,6 +78,34 @@ export default function PosPage() {
   const [startShiftRequired, setStartShiftRequired] = useState(false);
   const [shiftDialogOpen, setShiftDialogOpen] = useState(false);
   const [attendancePromptOpen, setAttendancePromptOpen] = useState(false);
+  const [desktopMode, setDesktopMode] = useState(false);
+  const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
+  const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [activeDiningSectionId, setActiveDiningSectionId] = useState("");
+  const [draggingTableId, setDraggingTableId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDesktopMode(Boolean(window.sankyDesktop?.isDesktop));
+  }, []);
+
+  useEffect(() => {
+    if (!cartTableId) return;
+    saveTableOrder(cartTableId, {
+      lines: cartLines,
+      discountPercent: cartDiscountPercent,
+      discountFixedAmount: cartDiscountFixedAmount,
+      promoCode: cartPromoCode,
+      customerName: cartCustomerName,
+      customerId: cartCustomerId,
+    });
+  }, [cartTableId, cartLines, cartDiscountPercent, cartDiscountFixedAmount, cartPromoCode, cartCustomerName, cartCustomerId, saveTableOrder]);
+
+  useEffect(() => {
+    if (!activeDiningSectionId && diningSections[0]) setActiveDiningSectionId(diningSections[0].id);
+    else if (activeDiningSectionId && !diningSections.some((section) => section.id === activeDiningSectionId)) {
+      setActiveDiningSectionId(diningSections[0]?.id ?? "");
+    }
+  }, [diningSections, activeDiningSectionId]);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.isActive);
@@ -134,12 +178,17 @@ export default function PosPage() {
   return (
     <AppShell title={t.pos.title}>
       <StartupValidation />
+      {desktopMode && <DesktopPrinterDialog open={printerSetupOpen} onOpenChange={setPrinterSetupOpen} />}
       <div className="flex h-full min-h-0">
         {/* Product browsing area */}
         <div className="flex flex-1 flex-col overflow-hidden">
           <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
+              {desktopMode && <Button variant="outline" size="sm" className="gap-2" onClick={() => setPrinterSetupOpen(true)}><Printer className="h-4 w-4" /> Printer</Button>}
               <StaffAttendanceButton />
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => setTablePickerOpen(true)}>
+                <Utensils className="h-4 w-4" />{locale === "ar" ? "الطاولات" : "Tables"}
+              </Button>
               {openShift ? (
                 <>
                   <span className="flex items-center gap-1.5 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
@@ -220,6 +269,48 @@ export default function PosPage() {
       <PaymentDialog open={paymentOpen} onOpenChange={setPaymentOpen} onOrderComplete={() => setSearch("")} />
       <HeldOrdersDialog open={heldOpen} onOpenChange={setHeldOpen} />
       <InventoryQualityCheckDialog open={inventoryCheckOpen} onOpenChange={setInventoryCheckOpen} />
+      <Dialog open={tablePickerOpen} onOpenChange={setTablePickerOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{locale === "ar" ? "اختيار طاولة وبدء طلب محلي" : "Choose a table and start a dine-in order"}</DialogTitle>
+            <DialogDescription>{locale === "ar" ? "الطاولات تُضاف وتُدار من الإعدادات." : "Tables are added and managed in Settings."}</DialogDescription>
+          </DialogHeader>
+          {cartTableId && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/5 p-3"><span className="text-sm">{locale === "ar" ? `الطلب الحالي محفوظ على ${useTableStore.getState().tables.find((table) => table.id === cartTableId)?.name ?? "الطاولة"}` : `Current order is on ${useTableStore.getState().tables.find((table) => table.id === cartTableId)?.name ?? "table"}`}</span><Button type="button" size="sm" variant="outline" onClick={() => {
+            const cart = useCartStore.getState();
+            if (cart.tableId) saveTableOrder(cart.tableId, { lines: cart.lines, discountPercent: cart.discountPercent, discountFixedAmount: cart.discountFixedAmount, promoCode: cart.promoCode, customerName: cart.customerName, customerId: cart.customerId });
+            cart.clearCart();
+            setTablePickerOpen(false);
+            toast(locale === "ar" ? "تم حفظ الطلب على الطاولة ويمكنك فتحه لاحقًا" : "Order saved on the table; you can reopen it later", "success");
+          }}>{locale === "ar" ? "حفظ وترك الطاولة" : "Save and leave table"}</Button></div>}
+          {diningSections.length ? <div className="flex flex-wrap gap-2 border-b pb-3">{diningSections.map((section) => <Button key={section.id} type="button" variant={activeDiningSectionId === section.id ? "default" : "outline"} size="sm" onClick={() => setActiveDiningSectionId(section.id)}>{section.name}<span className="ms-1 opacity-75">{diningTables.filter((table) => table.sectionId === section.id).length}</span></Button>)}</div> : null}
+          {diningSections.length ? <div className="max-h-[55vh] overflow-y-auto rounded-2xl border border-dashed bg-muted/30 p-3" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+            event.preventDefault();
+            if (draggingTableId && activeDiningSectionId) moveTable(draggingTableId, activeDiningSectionId, diningTables.filter((table) => table.sectionId === activeDiningSectionId).length);
+            setDraggingTableId(null);
+          }}><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{diningSections.find((section) => section.id === activeDiningSectionId)?.name}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "اسحب الطاولات لتغيير أماكنها" : "Drag tables to arrange them"}</span></div><div className="grid min-h-48 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{diningTables.filter((table) => table.sectionId === activeDiningSectionId).sort((a, b) => a.position - b.position).map((table) => {
+            const occupied = occupiedTableIds.includes(table.id);
+            const draft = tableOrders[table.id];
+            const count = draft?.lines.reduce((sum, line) => sum + line.qty, 0) ?? 0;
+            return <div key={table.id} draggable onDragStart={() => setDraggingTableId(table.id)} onDragEnd={() => setDraggingTableId(null)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
+              event.preventDefault(); event.stopPropagation();
+              if (draggingTableId && draggingTableId !== table.id) moveTable(draggingTableId, activeDiningSectionId, table.position);
+              setDraggingTableId(null);
+            }} className={`rounded-2xl border p-2 transition ${draggingTableId === table.id ? "opacity-40" : ""} ${occupied ? "border-amber-500/30 bg-amber-500/5" : "border-emerald-500/25 bg-card"}`}>
+              <div className="mb-2 flex items-center justify-between gap-1 px-1"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${occupied ? "bg-amber-500/10 text-amber-700" : "bg-emerald-500/10 text-emerald-700"}`}>{occupied ? (locale === "ar" ? "مشغولة" : "Occupied") : (locale === "ar" ? "فاضية" : "Available")}</span><span className="text-[11px] text-muted-foreground">{table.seats} {locale === "ar" ? "مقاعد" : "seats"}</span></div>
+              <Button type="button" variant={occupied ? "secondary" : "outline"} className="h-20 w-full flex-col gap-1" onClick={() => {
+                const currentCart = useCartStore.getState();
+                if (currentCart.lines.length && currentCart.tableId !== table.id) { toast(locale === "ar" ? "احفظ الطلب الحالي على طاولته قبل فتح طاولة أخرى" : "Save the current table order before opening another table", "error"); return; }
+                const saved = tableOrders[table.id];
+                setCartState({ lines: saved?.lines ?? [], orderType: "dine_in", tableId: table.id, tableNumber: table.name, discountPercent: saved?.discountPercent ?? 0, discountFixedAmount: saved?.discountFixedAmount ?? 0, promoCode: saved?.promoCode, customerName: saved?.customerName, customerId: saved?.customerId });
+                occupyTable(table.id);
+                setTablePickerOpen(false);
+                toast(occupied && count ? (locale === "ar" ? `تم استكمال طلب ${table.name} (${count} صنف)` : `Reopened ${table.name} order (${count} items)`) : (locale === "ar" ? `بدأ طلب على ${table.name}` : `Order started at ${table.name}`), "success");
+              }}><Utensils className="h-5 w-5" /><span className="font-semibold">{table.name}</span>{occupied && count > 0 && <span className="text-xs">{count} {locale === "ar" ? "صنف" : "items"}</span>}</Button>
+            </div>;
+          })}</div></div> : <div className="rounded-xl border border-dashed p-7 text-center text-sm text-muted-foreground">{locale === "ar" ? "أضف قسمًا وطاولات من صفحة الإعدادات." : "Add areas and tables first from Settings."}</div>}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setTablePickerOpen(false)}>{t.common.close}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <StartShiftDialog
         open={startShiftOpen}
         required={startShiftRequired}

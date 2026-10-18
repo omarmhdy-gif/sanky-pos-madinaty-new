@@ -90,7 +90,7 @@ export interface CartLine {
 // posOrders()/wasteOrders()/wasteSummary().
 export type PaymentMethod = "cash" | "card" | "wallet" | "split" | "talabat" | "waste";
 export type OrderStatus = "completed" | "refunded" | "voided" | "held";
-export type OrderType = "takeaway";
+export type OrderType = "takeaway" | "dine_in";
 
 export interface SplitPaymentPart {
   method: "cash" | "card" | "wallet";
@@ -386,6 +386,11 @@ export interface ShopSettings {
   externalPaymentName?: { en: string; ar: string };
   externalPaymentIcon?: string;
   externalPaymentMethods?: ExternalPaymentMethod[];
+  /** Shared cashier table map. Active carts remain local to avoid overwriting another terminal's open order. */
+  diningLayout?: {
+    sections: { id: string; name: string }[];
+    tables: { id: string; sectionId: string; name: string; seats: number; position: number }[];
+  } | null;
 }
 
 export interface ExternalPaymentMethod {
@@ -462,6 +467,7 @@ export interface HeldOrder {
   label: string;
   lines: CartLine[];
   orderType: OrderType;
+  tableId?: string;
   tableNumber?: string;
   customerName?: string;
   customerId?: string;
