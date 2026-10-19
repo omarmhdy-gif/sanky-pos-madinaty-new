@@ -15,6 +15,9 @@ export interface DiningTable {
   name: string;
   seats: number;
   position: number;
+  /** Optional floor-plan grid coordinates. Old layouts fall back to `position`. */
+  positionX?: number;
+  positionY?: number;
 }
 
 export interface TableOrderDraft {
@@ -57,6 +60,8 @@ const DEFAULT_TABLES: DiningTable[] = DEFAULT_SECTIONS.flatMap((section, section
     name: `طاولة ${tableIndex + 1}`,
     seats: 4,
     position: tableIndex,
+    positionX: tableIndex,
+    positionY: 0,
   }))
 );
 
@@ -80,7 +85,11 @@ export const useTableStore = create<TableStore>()(
       updateSection: (id, name) => set((state) => ({ sections: state.sections.map((section) => section.id === id ? { ...section, name } : section) })),
       deleteSection: (id) => set((state) => ({ sections: state.sections.filter((section) => section.id !== id) })),
       addTable: (input) => set((state) => ({
-        tables: [...state.tables, { ...input, id: genId("table"), position: state.tables.filter((table) => table.sectionId === input.sectionId).length }],
+        tables: (() => {
+          const sectionTables = state.tables.filter((table) => table.sectionId === input.sectionId);
+          const position = sectionTables.length;
+          return [...state.tables, { ...input, id: genId("table"), position, positionX: position % 4, positionY: Math.floor(position / 4) }];
+        })(),
       })),
       updateTable: (id, patch) => set((state) => ({ tables: state.tables.map((table) => table.id === id ? { ...table, ...patch } : table) })),
       deleteTable: (id) => set((state) => {

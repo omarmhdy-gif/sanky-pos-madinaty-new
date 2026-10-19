@@ -27,6 +27,7 @@ import { StaffAttendanceButton } from "@/components/attendance/StaffAttendanceBu
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DesktopPrinterDialog } from "@/components/pos/DesktopPrinterDialog";
 import { useTableStore } from "@/lib/store/useTableStore";
+import { getDiningPosition, getDiningSectionLabel, getDiningTableLabel } from "@/lib/tables";
 
 export default function PosPage() {
   const { t, locale } = useI18n();
@@ -50,7 +51,6 @@ export default function PosPage() {
   const tableOrders = useTableStore((s) => s.tableOrders);
   const occupyTable = useTableStore((s) => s.occupyTable);
   const saveTableOrder = useTableStore((s) => s.saveTableOrder);
-  const moveTable = useTableStore((s) => s.moveTable);
 
   // Browsing/scanning/building a cart never requires a shift — only
   // charging does (gated in handleCharge below). Closing a shift no longer
@@ -82,7 +82,6 @@ export default function PosPage() {
   const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [activeDiningSectionId, setActiveDiningSectionId] = useState("");
-  const [draggingTableId, setDraggingTableId] = useState<string | null>(null);
 
   useEffect(() => {
     setDesktopMode(Boolean(window.sankyDesktop?.isDesktop));
@@ -106,6 +105,13 @@ export default function PosPage() {
       setActiveDiningSectionId(diningSections[0]?.id ?? "");
     }
   }, [diningSections, activeDiningSectionId]);
+
+  const activeDiningTables = useMemo(() => diningTables
+    .filter((table) => table.sectionId === activeDiningSectionId)
+    .sort((a, b) => a.position - b.position)
+    .map((table, index) => ({ table, ...getDiningPosition(table, index) })), [activeDiningSectionId, diningTables]);
+  const diningTableRows = Math.max(4, ...activeDiningTables.map((item) => item.y + 1));
+  const diningTablesByCell = new Map(activeDiningTables.map((item) => [`${item.x}:${item.y}`, item.table]));
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.isActive);
@@ -275,39 +281,34 @@ export default function PosPage() {
             <DialogTitle>{locale === "ar" ? "اختيار طاولة وبدء طلب محلي" : "Choose a table and start a dine-in order"}</DialogTitle>
             <DialogDescription>{locale === "ar" ? "الطاولات تُضاف وتُدار من الإعدادات." : "Tables are added and managed in Settings."}</DialogDescription>
           </DialogHeader>
-          {cartTableId && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/5 p-3"><span className="text-sm">{locale === "ar" ? `الطلب الحالي محفوظ على ${useTableStore.getState().tables.find((table) => table.id === cartTableId)?.name ?? "الطاولة"}` : `Current order is on ${useTableStore.getState().tables.find((table) => table.id === cartTableId)?.name ?? "table"}`}</span><Button type="button" size="sm" variant="outline" onClick={() => {
+          {cartTableId && <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/5 p-3"><span className="text-sm">{locale === "ar" ? `الطلب الحالي محفوظ على ${useTableStore.getState().tables.find((table) => table.id === cartTableId)?.name ?? "الطاولة"}` : `Current order is on ${getDiningTableLabel(useTableStore.getState().tables.find((table) => table.id === cartTableId)?.name ?? "Table", locale)}`}</span><Button type="button" size="sm" variant="outline" onClick={() => {
             const cart = useCartStore.getState();
             if (cart.tableId) saveTableOrder(cart.tableId, { lines: cart.lines, discountPercent: cart.discountPercent, discountFixedAmount: cart.discountFixedAmount, promoCode: cart.promoCode, customerName: cart.customerName, customerId: cart.customerId });
             cart.clearCart();
             setTablePickerOpen(false);
             toast(locale === "ar" ? "تم حفظ الطلب على الطاولة ويمكنك فتحه لاحقًا" : "Order saved on the table; you can reopen it later", "success");
           }}>{locale === "ar" ? "حفظ وترك الطاولة" : "Save and leave table"}</Button></div>}
-          {diningSections.length ? <div className="flex flex-wrap gap-2 border-b pb-3">{diningSections.map((section) => <Button key={section.id} type="button" variant={activeDiningSectionId === section.id ? "default" : "outline"} size="sm" onClick={() => setActiveDiningSectionId(section.id)}>{section.name}<span className="ms-1 opacity-75">{diningTables.filter((table) => table.sectionId === section.id).length}</span></Button>)}</div> : null}
-          {diningSections.length ? <div className="max-h-[55vh] overflow-y-auto rounded-2xl border border-dashed bg-muted/30 p-3" onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
-            event.preventDefault();
-            if (draggingTableId && activeDiningSectionId) moveTable(draggingTableId, activeDiningSectionId, diningTables.filter((table) => table.sectionId === activeDiningSectionId).length);
-            setDraggingTableId(null);
-          }}><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{diningSections.find((section) => section.id === activeDiningSectionId)?.name}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "اسحب الطاولات لتغيير أماكنها" : "Drag tables to arrange them"}</span></div><div className="grid min-h-48 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">{diningTables.filter((table) => table.sectionId === activeDiningSectionId).sort((a, b) => a.position - b.position).map((table) => {
+          {diningSections.length ? <div className="flex flex-wrap gap-2 border-b pb-3">{diningSections.map((section) => <Button key={section.id} type="button" variant={activeDiningSectionId === section.id ? "default" : "outline"} size="sm" onClick={() => setActiveDiningSectionId(section.id)}>{getDiningSectionLabel(section.name, locale)}<span className="ms-1 opacity-75">{diningTables.filter((table) => table.sectionId === section.id).length}</span></Button>)}</div> : null}
+          {diningSections.length ? <div className="max-h-[55vh] overflow-y-auto rounded-2xl border border-dashed bg-muted/30 p-3"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{getDiningSectionLabel(diningSections.find((section) => section.id === activeDiningSectionId)?.name ?? "", locale)}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "مخطط الطاولات والمساحات الفارغة" : "Tables and open spaces"}</span></div><div className="grid min-w-[420px] grid-cols-4 gap-2 sm:gap-3">{Array.from({ length: diningTableRows * 4 }, (_, cellIndex) => {
+            const table = diningTablesByCell.get(`${cellIndex % 4}:${Math.floor(cellIndex / 4)}`);
+            if (!table) return <div key={`empty-${cellIndex}`} aria-hidden="true" className="aspect-square min-h-20 rounded-xl border border-dashed border-border/40 bg-background/20" />;
             const occupied = occupiedTableIds.includes(table.id);
             const draft = tableOrders[table.id];
             const count = draft?.lines.reduce((sum, line) => sum + line.qty, 0) ?? 0;
-            return <div key={table.id} draggable onDragStart={() => setDraggingTableId(table.id)} onDragEnd={() => setDraggingTableId(null)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => {
-              event.preventDefault(); event.stopPropagation();
-              if (draggingTableId && draggingTableId !== table.id) moveTable(draggingTableId, activeDiningSectionId, table.position);
-              setDraggingTableId(null);
-            }} className={`rounded-2xl border p-2 transition ${draggingTableId === table.id ? "opacity-40" : ""} ${occupied ? "border-amber-500/30 bg-amber-500/5" : "border-emerald-500/25 bg-card"}`}>
-              <div className="mb-2 flex items-center justify-between gap-1 px-1"><span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${occupied ? "bg-amber-500/10 text-amber-700" : "bg-emerald-500/10 text-emerald-700"}`}>{occupied ? (locale === "ar" ? "مشغولة" : "Occupied") : (locale === "ar" ? "فاضية" : "Available")}</span><span className="text-[11px] text-muted-foreground">{table.seats} {locale === "ar" ? "مقاعد" : "seats"}</span></div>
-              <Button type="button" variant={occupied ? "secondary" : "outline"} className="h-20 w-full flex-col gap-1" onClick={() => {
+            const displayName = getDiningTableLabel(table.name, locale);
+            return <div key={table.id} className={`flex aspect-square min-h-20 flex-col justify-between rounded-2xl border p-2 transition ${occupied ? "border-amber-500/30 bg-amber-500/5" : "border-emerald-500/25 bg-card"}`}>
+              <div className="flex items-center justify-between gap-1"><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${occupied ? "bg-amber-500/10 text-amber-700" : "bg-emerald-500/10 text-emerald-700"}`}>{occupied ? (locale === "ar" ? "مشغولة" : "Occupied") : (locale === "ar" ? "فاضية" : "Available")}</span><span className="text-[10px] text-muted-foreground">{table.seats} {locale === "ar" ? "مقاعد" : "seats"}</span></div>
+              <Button type="button" variant={occupied ? "secondary" : "outline"} className="h-16 w-full flex-col gap-1 px-1 text-xs sm:h-20 sm:text-sm" onClick={() => {
                 const currentCart = useCartStore.getState();
                 if (currentCart.lines.length && currentCart.tableId !== table.id) { toast(locale === "ar" ? "احفظ الطلب الحالي على طاولته قبل فتح طاولة أخرى" : "Save the current table order before opening another table", "error"); return; }
                 const saved = tableOrders[table.id];
-                setCartState({ lines: saved?.lines ?? [], orderType: "dine_in", tableId: table.id, tableNumber: table.name, discountPercent: saved?.discountPercent ?? 0, discountFixedAmount: saved?.discountFixedAmount ?? 0, promoCode: saved?.promoCode, customerName: saved?.customerName, customerId: saved?.customerId });
+                setCartState({ lines: saved?.lines ?? [], orderType: "dine_in", tableId: table.id, tableNumber: displayName, discountPercent: saved?.discountPercent ?? 0, discountFixedAmount: saved?.discountFixedAmount ?? 0, promoCode: saved?.promoCode, customerName: saved?.customerName, customerId: saved?.customerId });
                 occupyTable(table.id);
                 setTablePickerOpen(false);
-                toast(occupied && count ? (locale === "ar" ? `تم استكمال طلب ${table.name} (${count} صنف)` : `Reopened ${table.name} order (${count} items)`) : (locale === "ar" ? `بدأ طلب على ${table.name}` : `Order started at ${table.name}`), "success");
-              }}><Utensils className="h-5 w-5" /><span className="font-semibold">{table.name}</span>{occupied && count > 0 && <span className="text-xs">{count} {locale === "ar" ? "صنف" : "items"}</span>}</Button>
+                toast(occupied && count ? (locale === "ar" ? `تم استكمال طلب ${table.name} (${count} صنف)` : `Reopened ${displayName} order (${count} items)`) : (locale === "ar" ? `بدأ طلب على ${table.name}` : `Order started at ${displayName}`), "success");
+              }}><Utensils className="h-4 w-4" /><span className="font-semibold">{displayName}</span>{occupied && count > 0 && <span className="text-[10px]">{count} {locale === "ar" ? "صنف" : "items"}</span>}</Button>
             </div>;
-          })}</div></div> : <div className="rounded-xl border border-dashed p-7 text-center text-sm text-muted-foreground">{locale === "ar" ? "أضف قسمًا وطاولات من صفحة الإعدادات." : "Add areas and tables first from Settings."}</div>}
+          })}</div></div> : <div className="rounded-xl border border-dashed p-7 text-center text-sm text-muted-foreground">{locale === "ar" ? "أضف قسمًا وطاولات من صفحة الإعدادات." : "Add sections and tables first from Settings."}</div>}
           <DialogFooter><Button type="button" variant="outline" onClick={() => setTablePickerOpen(false)}>{t.common.close}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
