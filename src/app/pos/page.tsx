@@ -226,7 +226,7 @@ export default function PosPage() {
             onSearchChange={setSearch}
             onOpenHeld={() => setHeldOpen(true)}
           />
-          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pb-24 md:pb-0">
+          <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pb-24 md:pb-0">
             <ProductGrid
               products={filteredProducts}
               onSelect={handleSelectProduct}
@@ -276,7 +276,7 @@ export default function PosPage() {
       <HeldOrdersDialog open={heldOpen} onOpenChange={setHeldOpen} />
       <InventoryQualityCheckDialog open={inventoryCheckOpen} onOpenChange={setInventoryCheckOpen} />
       <Dialog open={tablePickerOpen} onOpenChange={setTablePickerOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl no-scrollbar">
           <DialogHeader>
             <DialogTitle>{locale === "ar" ? "اختيار طاولة وبدء طلب محلي" : "Choose a table and start a dine-in order"}</DialogTitle>
             <DialogDescription>{locale === "ar" ? "الطاولات تُضاف وتُدار من الإعدادات." : "Tables are added and managed in Settings."}</DialogDescription>
@@ -289,7 +289,7 @@ export default function PosPage() {
             toast(locale === "ar" ? "تم حفظ الطلب على الطاولة ويمكنك فتحه لاحقًا" : "Order saved on the table; you can reopen it later", "success");
           }}>{locale === "ar" ? "حفظ وترك الطاولة" : "Save and leave table"}</Button></div>}
           {diningSections.length ? <div className="flex flex-wrap gap-2 border-b pb-3">{diningSections.map((section) => <Button key={section.id} type="button" variant={activeDiningSectionId === section.id ? "default" : "outline"} size="sm" onClick={() => setActiveDiningSectionId(section.id)}>{getDiningSectionLabel(section.name, locale)}<span className="ms-1 opacity-75">{diningTables.filter((table) => table.sectionId === section.id).length}</span></Button>)}</div> : null}
-          {diningSections.length ? <div className="max-h-[55vh] overflow-y-auto rounded-2xl border border-dashed bg-muted/30 p-3"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{getDiningSectionLabel(diningSections.find((section) => section.id === activeDiningSectionId)?.name ?? "", locale)}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "مخطط الطاولات والمساحات الفارغة" : "Tables and open spaces"}</span></div><div className="grid min-w-[420px] grid-cols-4 gap-2 sm:gap-3">{Array.from({ length: diningTableRows * 4 }, (_, cellIndex) => {
+          {diningSections.length ? <div className="max-h-[55vh] overflow-y-auto no-scrollbar rounded-2xl border border-dashed bg-muted/30 p-3"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{getDiningSectionLabel(diningSections.find((section) => section.id === activeDiningSectionId)?.name ?? "", locale)}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "مخطط الطاولات والمساحات الفارغة" : "Tables and open spaces"}</span></div><div className="grid min-w-[420px] grid-cols-4 gap-2 sm:gap-3">{Array.from({ length: diningTableRows * 4 }, (_, cellIndex) => {
             const table = diningTablesByCell.get(`${cellIndex % 4}:${Math.floor(cellIndex / 4)}`);
             if (!table) return <div key={`empty-${cellIndex}`} aria-hidden="true" className="aspect-square min-h-20 rounded-xl border border-dashed border-border/40 bg-background/20" />;
             const occupied = occupiedTableIds.includes(table.id);

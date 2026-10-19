@@ -274,7 +274,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
           sufficient guarantee across all Chrome/ChromeOS builds — min-h-0
           makes the shrink-to-fit behavior explicit instead of relying on
           browsers correctly applying that spec edge case. */}
-      <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin px-3 py-2">
+      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-3 py-2">
         {lines.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
             <ShoppingBag className="h-10 w-10 opacity-30" />

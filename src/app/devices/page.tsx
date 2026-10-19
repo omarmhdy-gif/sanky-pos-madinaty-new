@@ -1163,7 +1163,7 @@ export default function DevicesPage() {
                 {printJobs.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t.devices.never}</p>
                 ) : (
-                  <div className="max-h-96 space-y-2 overflow-y-auto scrollbar-thin">
+                  <div className="max-h-96 space-y-2 overflow-y-auto no-scrollbar">
                     {printJobs.map((job) => (
                       <div
                         key={job.id}

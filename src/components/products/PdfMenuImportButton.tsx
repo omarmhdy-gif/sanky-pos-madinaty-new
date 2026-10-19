@@ -72,7 +72,7 @@ export function PdfMenuImportButton() {
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-background p-3 scrollbar-thin sm:p-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-background p-3 no-scrollbar sm:p-4">
             {PDF_MENU.map((category) => (
               <section key={category.name.en}>
                 <h3 className="mb-2 border-b border-border pb-1.5 text-sm font-bold text-primary">

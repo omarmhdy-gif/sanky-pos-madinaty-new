@@ -60,7 +60,7 @@ export function AppShell({ title, children }: { title: string; children: React.R
           <Sidebar collapsed={sidebarCollapsed} />
           <div className="flex flex-1 flex-col overflow-hidden">
             <Topbar title={title} sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
-            <main className="flex-1 overflow-y-auto scrollbar-thin">{children}</main>
+            <main className="flex-1 overflow-y-auto no-scrollbar">{children}</main>
             <BottomNav />
           </div>
         </div>

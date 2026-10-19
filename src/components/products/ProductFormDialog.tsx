@@ -490,7 +490,7 @@ export function ProductFormDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="max-h-[72vh] space-y-5 overflow-y-auto scrollbar-thin px-0.5">
+        <div className="max-h-[72vh] space-y-5 overflow-y-auto no-scrollbar px-0.5">
           {/* Product name */}
           <div className="grid grid-cols-2 gap-3">
             <div>

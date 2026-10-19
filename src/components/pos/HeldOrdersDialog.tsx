@@ -52,7 +52,7 @@ export function HeldOrdersDialog({ open, onOpenChange }: { open: boolean; onOpen
             <p className="text-sm">{t.pos.noHeldOrders}</p>
           </div>
         ) : (
-          <div className="max-h-[60vh] space-y-2.5 overflow-y-auto scrollbar-thin">
+          <div className="max-h-[60vh] space-y-2.5 overflow-y-auto no-scrollbar">
             {held.map((order) => {
               const total = order.lines.reduce((s, l) => s + lineTotal(l), 0);
               const itemCount = order.lines.reduce((s, l) => s + l.qty, 0);

@@ -81,7 +81,7 @@ export function CategoryManagerDialog({ open, onOpenChange }: { open: boolean; o
 
         {!formOpen ? (
           <>
-            <div className="max-h-[50vh] space-y-2 overflow-y-auto scrollbar-thin">
+            <div className="max-h-[50vh] space-y-2 overflow-y-auto no-scrollbar">
               {categories.map((c) => (
                 <div key={c.id} className="flex items-center justify-between rounded-lg border border-border p-3">
                   <span className="text-sm font-medium">{bilingual(c.name, locale)}</span>

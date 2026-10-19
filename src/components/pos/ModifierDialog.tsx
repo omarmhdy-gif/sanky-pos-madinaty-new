@@ -95,7 +95,7 @@ export function ModifierDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="max-h-[50vh] space-y-5 overflow-y-auto scrollbar-thin -mx-1 px-1">
+        <div className="max-h-[50vh] space-y-5 overflow-y-auto no-scrollbar -mx-1 px-1">
           {groups.map((g) => (
             <div key={g.id}>
               <div className="mb-2 flex items-center justify-between">
