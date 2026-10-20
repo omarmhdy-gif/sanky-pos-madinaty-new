@@ -59,6 +59,7 @@ interface DataStore extends AppData {
   loading: boolean;
   loaded: boolean;
   fetchAll: () => Promise<boolean>;
+  refreshSettings: () => Promise<boolean>;
 
   // Products
   addProduct: (p: Omit<Product, "id" | "sortOrder" | "branchId">) => Promise<void>;
@@ -160,6 +161,42 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   attendanceEmployees: [],
   loading: false,
   loaded: false,
+
+  refreshSettings: async () => {
+    const branchId = useBranchStore.getState().currentBranchId;
+    if (!branchId || (typeof navigator !== "undefined" && !navigator.onLine)) return false;
+    try {
+      const settings = await api.fetchSettings(branchId);
+      set({ settings });
+      cacheShopLogo(branchId, settings.logo);
+      const current = get();
+      try {
+        await savePosSnapshot(branchId, {
+          settings,
+          staff: current.staff,
+          categories: current.categories,
+          products: current.products,
+          modifierGroups: current.modifierGroups,
+          orders: current.orders,
+          customers: current.customers,
+          expenses: current.expenses,
+          inventoryItems: current.inventoryItems,
+          inventoryQualityChecks: current.inventoryQualityChecks,
+          stockMovements: current.stockMovements,
+          purchases: current.purchases,
+          shifts: current.shifts,
+          attendance: current.attendance,
+          attendanceEmployees: current.attendanceEmployees,
+        });
+      } catch (err) {
+        console.warn("Could not refresh the local POS snapshot after settings sync:", err);
+      }
+      return true;
+    } catch (err) {
+      console.warn("Could not refresh shared POS settings:", err);
+      return false;
+    }
+  },
 
   fetchAll: async () => {
     const branchId = useBranchStore.getState().currentBranchId;

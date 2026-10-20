@@ -86,6 +86,11 @@ export async function fetchBranches(): Promise<Branch[]> {
   return unwrap(res).map(fromBranchRow);
 }
 
+export async function fetchSettings(branchId: string): Promise<ShopSettings> {
+  const res = await supabase.from("shop_settings").select("*").eq("branch_id", branchId).single();
+  return fromSettingsRow(unwrap(res));
+}
+
 // TEMPORARY diagnostic instrumentation (added while investigating the
 // 2026-07 "canceling statement due to timeout" incident — root cause was
 // the orders+order_lines query below, fixed by migration_2_2.sql's indexes;

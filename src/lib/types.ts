@@ -386,10 +386,20 @@ export interface ShopSettings {
   externalPaymentName?: { en: string; ar: string };
   externalPaymentIcon?: string;
   externalPaymentMethods?: ExternalPaymentMethod[];
-  /** Shared cashier table map. Active carts remain local to avoid overwriting another terminal's open order. */
+  /** Shared cashier table map and active table orders for website/desktop POS. */
   diningLayout?: {
     sections: { id: string; name: string }[];
     tables: { id: string; sectionId: string; name: string; seats: number; position: number }[];
+    occupiedTableIds?: string[];
+    tableOrders?: Record<string, {
+      lines: CartLine[];
+      discountPercent: number;
+      discountFixedAmount: number;
+      promoCode?: string;
+      customerName?: string;
+      customerId?: string;
+      updatedAt: string;
+    }>;
   } | null;
 }
 

@@ -35,7 +35,12 @@ interface TableStore {
   tables: DiningTable[];
   occupiedTableIds: string[];
   tableOrders: Record<string, TableOrderDraft>;
-  applyRemoteLayout: (layout: { sections: DiningSection[]; tables: DiningTable[] }) => void;
+  applyRemoteLayout: (layout: {
+    sections: DiningSection[];
+    tables: DiningTable[];
+    occupiedTableIds?: string[];
+    tableOrders?: Record<string, TableOrderDraft>;
+  }) => void;
   addSection: (name: string) => void;
   updateSection: (id: string, name: string) => void;
   deleteSection: (id: string) => void;
@@ -77,8 +82,10 @@ export const useTableStore = create<TableStore>()(
         return {
           sections: layout.sections,
           tables: layout.tables,
-          occupiedTableIds: state.occupiedTableIds.filter((id) => tableIds.has(id)),
-          tableOrders: Object.fromEntries(Object.entries(state.tableOrders).filter(([id]) => tableIds.has(id))),
+          occupiedTableIds: (layout.occupiedTableIds ?? state.occupiedTableIds).filter((id) => tableIds.has(id)),
+          tableOrders: Object.fromEntries(
+            Object.entries(layout.tableOrders ?? state.tableOrders).filter(([id]) => tableIds.has(id))
+          ),
         };
       }),
       addSection: (name) => set((state) => ({ sections: [...state.sections, { id: genId("section"), name }] })),

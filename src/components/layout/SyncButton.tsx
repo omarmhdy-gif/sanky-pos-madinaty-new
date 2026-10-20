@@ -39,16 +39,22 @@ export function SyncButton() {
       if (refreshed) {
         const pending = useOrderQueueStore.getState().queue.length;
         if (window.sankyDesktop?.isDesktop) {
-          const update = await window.sankyDesktop.updater.check();
-          if (update.status === "available" && update.version) {
-            setAvailableVersion(update.version);
-            setUpdateDownloaded(false);
-            if (pending) toast(isArabic ? `تم تحديث بيانات الفرع. يوجد ${pending} طلب غير مرسل؛ أرسل الطلبات قبل تثبيت تحديث البرنامج.` : `Branch data refreshed. ${pending} sale(s) are still queued; send them before restarting to install the app update.`, "info");
-            else toast(isArabic ? `تم تحديث بيانات الفرع. يتوفر تحديث للبرنامج ${update.version}.` : `Branch data synced. App update ${update.version} is available.`, "success");
-            return;
-          }
-          if (update.status === "unavailable") {
-            toast(isArabic ? "تمت مزامنة بيانات الفرع، لكن تعذر التحقق من تحديث البرنامج." : "Branch data synced, but the app update service couldn't be reached.", "info");
+          try {
+            const update = await window.sankyDesktop.updater.check();
+            if (update.status === "available" && update.version) {
+              setAvailableVersion(update.version);
+              setUpdateDownloaded(false);
+              if (pending) toast(isArabic ? `تم تحديث بيانات الفرع. يوجد ${pending} طلب غير مرسل؛ أرسل الطلبات قبل تثبيت تحديث البرنامج.` : `Branch data refreshed. ${pending} sale(s) are still queued; send them before restarting to install the app update.`, "info");
+              else toast(isArabic ? `تم تحديث بيانات الفرع. يتوفر تحديث للبرنامج ${update.version}.` : `Branch data synced. App update ${update.version} is available.`, "success");
+              return;
+            }
+            if (update.status === "unavailable" || update.status === "unsupported") {
+              toast(isArabic ? "تم تحديث بيانات الموقع، لكن تعذر التحقق من تحديث برنامج الكمبيوتر." : "Website data synced, but the desktop app update service couldn't be reached.", "info");
+              return;
+            }
+          } catch (error) {
+            console.warn("Desktop update check failed after data sync:", error);
+            toast(isArabic ? "تم تحديث بيانات الموقع، لكن تعذر التحقق من تحديث برنامج الكمبيوتر." : "Website data synced, but the desktop app update check failed.", "info");
             return;
           }
         }
@@ -61,6 +67,9 @@ export function SyncButton() {
       } else {
         toast(isArabic ? "تعذرت المزامنة؛ بقيت البيانات المحفوظة على الجهاز." : "Sync couldn't reach the server. Saved device data was kept.", "error");
       }
+    } catch (error) {
+      console.error("POS sync failed:", error);
+      toast(isArabic ? "تعذرت مزامنة بيانات الموقع. تحقق من الاتصال ثم أعد المحاولة." : "Website data sync failed. Check the connection and try again.", "error");
     } finally {
       setSyncing(false);
     }
