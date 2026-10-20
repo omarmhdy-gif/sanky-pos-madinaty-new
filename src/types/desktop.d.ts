@@ -11,6 +11,18 @@ declare global {
         install: () => Promise<{ status: "installing"; version: string }>;
         onProgress: (callback: (progress: { percent: number; transferred: number; total: number }) => void) => () => void;
       };
+      renderer: {
+        sync: () => Promise<{
+          status: "unsupported" | "current" | "staged" | "updated" | "unavailable";
+          version?: string;
+          message?: string;
+        }>;
+        apply: (version: string) => Promise<{
+          status: "unsupported" | "current" | "updated" | "unavailable";
+          version?: string;
+          message?: string;
+        }>;
+      };
       printer: {
         listUsb: () => Promise<{ name: string; portName: string; driverName: string }[]>;
         scanNetwork: (port?: number) => Promise<{ ip: string; port: number }[]>;

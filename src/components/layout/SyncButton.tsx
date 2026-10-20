@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDataStore } from "@/lib/store/useDataStore";
+import { useCartStore } from "@/lib/store/useCartStore";
 import { useOrderQueueStore } from "@/lib/store/useOrderQueueStore";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/ui/toast";
@@ -39,6 +40,32 @@ export function SyncButton() {
       if (refreshed) {
         const pending = useOrderQueueStore.getState().queue.length;
         if (window.sankyDesktop?.isDesktop) {
+          let rendererUnavailable = false;
+          try {
+            const renderer = await window.sankyDesktop.renderer.sync();
+            if (renderer.status === "staged") {
+              if (!renderer.version) throw new Error("The staged website renderer has no version.");
+              const cartIsClear = useCartStore.getState().lines.length === 0;
+              const queueIsClear = useOrderQueueStore.getState().queue.length === 0;
+              if (cartIsClear && queueIsClear && renderer.version) {
+                const applied = await window.sankyDesktop.renderer.apply(renderer.version);
+                if (applied.status === "updated" || applied.status === "current") {
+                  toast(isArabic ? "تم تحديث بيانات الموقع وواجهة الكاشير. جاري إعادة تحميل البرنامج." : "Website data and cashier interface updated. Reloading the POS.", "success");
+                  window.setTimeout(() => window.location.reload(), 250);
+                  return;
+                }
+                if (applied.status === "unavailable") rendererUnavailable = true;
+              }
+              toast(isArabic
+                ? `واجهة موقع أحدث جاهزة (${renderer.version.slice(0, 10)}). أرسل الطلبات وأفرغ الطلب الحالي، ثم اضغط مزامنة لتطبيقها.`
+                : `A newer website interface is ready (${renderer.version.slice(0, 10)}). Send queued sales and clear the current cart, then Sync again to apply it.`, "info");
+              return;
+            }
+            rendererUnavailable = renderer.status === "unavailable";
+          } catch (error) {
+            console.warn("Website renderer sync failed after data sync:", error);
+            rendererUnavailable = true;
+          }
           try {
             const update = await window.sankyDesktop.updater.check();
             if (update.status === "available" && update.version) {
@@ -49,19 +76,23 @@ export function SyncButton() {
               return;
             }
             if (update.status === "unavailable" || update.status === "unsupported") {
-              toast(isArabic ? "تم تحديث بيانات الموقع، لكن تعذر التحقق من تحديث برنامج الكمبيوتر." : "Website data synced, but the desktop app update service couldn't be reached.", "info");
+              toast(rendererUnavailable
+                ? (isArabic ? "تم تحديث البيانات، لكن تعذر تنزيل واجهة الموقع أو التحقق من تحديث الكمبيوتر." : "Data synced, but the website interface download and desktop update check were unavailable.")
+                : (isArabic ? "تم تحديث بيانات الموقع." : "Website data synced."), "info");
               return;
             }
           } catch (error) {
             console.warn("Desktop update check failed after data sync:", error);
-            toast(isArabic ? "تم تحديث بيانات الموقع، لكن تعذر التحقق من تحديث برنامج الكمبيوتر." : "Website data synced, but the desktop app update check failed.", "info");
+            toast(rendererUnavailable
+              ? (isArabic ? "تم تحديث البيانات، لكن تعذر تنزيل واجهة الموقع أو التحقق من تحديث الكمبيوتر." : "Data synced, but the website interface download and desktop update check failed.")
+              : (isArabic ? "تم تحديث بيانات الموقع." : "Website data synced."), "info");
             return;
           }
         }
         toast(
           pending
-            ? (isArabic ? `تم تحديث بيانات الفرع. ${pending} طلب بيع محفوظ على الجهاز وسيُعاد إرساله عند عودة الاتصال.` : `Branch data refreshed. ${pending} offline sale(s) will retry automatically when online.`)
-            : (isArabic ? "تمت مزامنة بيانات الفرع." : "Branch data synced."),
+            ? (isArabic ? `تم تحديث بيانات الموقع. ${pending} طلب بيع محفوظ على الجهاز وسيُعاد إرساله عند عودة الاتصال.` : `Website data refreshed. ${pending} offline sale(s) will retry automatically when online.`)
+            : (isArabic ? "تمت مزامنة بيانات الموقع." : "Website data synced."),
           pending ? "info" : "success"
         );
       } else {

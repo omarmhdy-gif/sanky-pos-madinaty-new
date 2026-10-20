@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld("sankyDesktop", Object.freeze({
       return () => ipcRenderer.removeListener("sanky:app:update-progress", handler);
     },
   }),
+  renderer: Object.freeze({
+    sync: () => ipcRenderer.invoke("sanky:renderer:sync"),
+    apply: (version) => ipcRenderer.invoke("sanky:renderer:apply", version),
+  }),
   printer: Object.freeze({
     listUsb: () => ipcRenderer.invoke("sanky:printer:list-usb"),
     scanNetwork: (port) => ipcRenderer.invoke("sanky:printer:scan-network", port),

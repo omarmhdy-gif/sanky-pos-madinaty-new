@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain } = require("electron");
 const { autoUpdater } = require("electron-updater");
+const { createHash } = require("node:crypto");
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -11,11 +12,21 @@ const { promisify } = require("node:util");
 const execFileAsync = promisify(execFile);
 
 const APP_ID = "com.sanky.pos";
+const USER_DATA_ROOT = path.join(app.getPath("appData"), "SankyPOS");
+app.setPath("userData", USER_DATA_ROOT);
 const SERVER_PORT = 41737;
 const ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
-const STATIC_ROOT = path.join(app.getAppPath(), "out");
+const PRODUCTION_ORIGIN = "https://sanky-pos-madinaty-new.vercel.app";
+const BUNDLED_STATIC_ROOT = path.join(app.getAppPath(), "out");
+const RENDERER_ROOT = path.join(USER_DATA_ROOT, "renderers");
+const RENDERER_POINTER = path.join(USER_DATA_ROOT, "renderer-current.json");
+const MAX_RENDERER_FILES = 15000;
+const MAX_RENDERER_FILE_BYTES = 200 * 1024 * 1024;
+const MAX_RENDERER_TOTAL_BYTES = 1024 * 1024 * 1024;
 const POS_ROUTES = new Set(["/", "/login", "/login/", "/branch-select", "/branch-select/", "/pos", "/pos/"]);
 const MIME_TYPES = {
+  ".avif": "image/avif",
+  ".bmp": "image/bmp",
   ".css": "text/css; charset=utf-8",
   ".gif": "image/gif",
   ".html": "text/html; charset=utf-8",
@@ -28,13 +39,163 @@ const MIME_TYPES = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".webp": "image/webp",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
 };
 
 let staticServer;
+let activeStaticRoot = BUNDLED_STATIC_ROOT;
+let activeRendererVersion = null;
 let downloadedUpdateVersion = null;
+
+function isSafeRendererPath(relativePath) {
+  if (typeof relativePath !== "string" || !relativePath || relativePath.includes("\\") || relativePath.startsWith("/")) return false;
+  const segments = relativePath.split("/");
+  if (segments.some((part) => !part || part === "." || part === "..")) return false;
+  return true;
+}
+
+function validateRendererManifest(manifest) {
+  if (!manifest || manifest.schema !== 1 || !Array.isArray(manifest.files) || manifest.files.length < 1 || manifest.files.length > MAX_RENDERER_FILES) {
+    throw new Error("The website returned an unsupported renderer manifest.");
+  }
+  let totalBytes = 0;
+  const seen = new Set();
+  for (const file of manifest.files) {
+    if (!isSafeRendererPath(file?.path) || seen.has(file.path)) throw new Error("The website renderer manifest contains an invalid path.");
+    if (!Number.isSafeInteger(file.size) || file.size < 0 || file.size > MAX_RENDERER_FILE_BYTES || !/^[a-f\d]{64}$/i.test(file.sha256 || "")) {
+      throw new Error("The website renderer manifest contains invalid file metadata.");
+    }
+    seen.add(file.path);
+    totalBytes += file.size;
+    if (totalBytes > MAX_RENDERER_TOTAL_BYTES) throw new Error("The website renderer update is larger than the supported limit.");
+  }
+  if (!seen.has("pos/index.html") || !seen.has("login/index.html") || !seen.has("branch-select/index.html")) {
+    throw new Error("The website renderer manifest is missing a cashier entry page.");
+  }
+  const version = createHash("sha256").update(JSON.stringify(manifest.files)).digest("hex");
+  if (manifest.version !== version) throw new Error("The website renderer manifest version does not match its file list.");
+  return { version, totalBytes };
+}
+
+async function hashFile(filePath) {
+  const hash = createHash("sha256");
+  await new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(filePath);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.once("error", reject);
+    stream.once("end", resolve);
+  });
+  return hash.digest("hex");
+}
+
+async function rendererDirectoryIsComplete(directory, manifest) {
+  try {
+    const saved = JSON.parse(await fs.promises.readFile(path.join(directory, "renderer-manifest.json"), "utf8"));
+    if (saved.version !== manifest.version) return false;
+    for (const entry of manifest.files) {
+      const filePath = path.resolve(directory, entry.path);
+      if (!filePath.startsWith(directory + path.sep)) return false;
+      const fileStat = await fs.promises.stat(filePath);
+      if (!fileStat.isFile() || fileStat.size !== entry.size || await hashFile(filePath) !== entry.sha256) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function activateRenderer(version, directory) {
+  const pointer = { version, appVersion: app.getVersion() };
+  const temporaryPointer = `${RENDERER_POINTER}.${process.pid}.tmp`;
+  await fs.promises.mkdir(path.dirname(RENDERER_POINTER), { recursive: true });
+  await fs.promises.writeFile(temporaryPointer, JSON.stringify(pointer), "utf8");
+  await fs.promises.rename(temporaryPointer, RENDERER_POINTER);
+  activeStaticRoot = directory;
+  activeRendererVersion = version;
+}
+
+async function loadRendererRoot() {
+  const bundledManifestPath = path.join(BUNDLED_STATIC_ROOT, "renderer-manifest.json");
+  try {
+    const bundledManifest = JSON.parse(await fs.promises.readFile(bundledManifestPath, "utf8"));
+    if (typeof bundledManifest.version === "string") activeRendererVersion = bundledManifest.version;
+  } catch {
+    // Older or development builds can continue from their packaged export.
+  }
+  try {
+    const pointer = JSON.parse(await fs.promises.readFile(RENDERER_POINTER, "utf8"));
+    if (pointer.appVersion !== app.getVersion() || !/^[a-f\d]{64}$/i.test(pointer.version || "")) return;
+    const directory = path.resolve(RENDERER_ROOT, `release-${pointer.version}`);
+    if (!directory.startsWith(RENDERER_ROOT + path.sep) || !fs.existsSync(path.join(directory, "pos", "index.html"))) return;
+    activeStaticRoot = directory;
+    activeRendererVersion = pointer.version;
+  } catch {
+    // A missing pointer means the packaged website is the offline fallback.
+  }
+}
+
+async function syncRenderer() {
+  if (!app.isPackaged || process.platform !== "win32") return { status: "unsupported" };
+  const response = await fetch(`${PRODUCTION_ORIGIN}/renderer-manifest.json`, { signal: AbortSignal.timeout(30000), cache: "no-store" });
+  if (!response.ok) throw new Error(`Could not retrieve the website renderer manifest (HTTP ${response.status}).`);
+  const manifest = await response.json();
+  const { version } = validateRendererManifest(manifest);
+  if (version === activeRendererVersion) return { status: "current", version };
+
+  const rendererDirectory = path.join(RENDERER_ROOT, `release-${version}`);
+  if (!await rendererDirectoryIsComplete(rendererDirectory, manifest)) {
+    const stagingDirectory = path.join(RENDERER_ROOT, `staging-${version}-${process.pid}`);
+    await fs.promises.mkdir(RENDERER_ROOT, { recursive: true });
+    await fs.promises.rm(stagingDirectory, { recursive: true, force: true });
+    await fs.promises.mkdir(stagingDirectory, { recursive: true });
+    try {
+      let completedBytes = 0;
+      for (const entry of manifest.files) {
+        const segments = entry.path.split("/").map((part) => encodeURIComponent(part));
+        const fileResponse = await fetch(`${PRODUCTION_ORIGIN}/${segments.join("/")}`, { signal: AbortSignal.timeout(60000), cache: "no-store" });
+        if (!fileResponse.ok) throw new Error(`Could not download website renderer file ${entry.path} (HTTP ${fileResponse.status}).`);
+        const bytes = Buffer.from(await fileResponse.arrayBuffer());
+        if (bytes.length !== entry.size || createHash("sha256").update(bytes).digest("hex") !== entry.sha256) {
+          throw new Error(`Website renderer file verification failed for ${entry.path}.`);
+        }
+        completedBytes += bytes.length;
+        if (completedBytes > MAX_RENDERER_TOTAL_BYTES) throw new Error("The website renderer update is larger than the supported limit.");
+        const destination = path.resolve(stagingDirectory, entry.path);
+        if (!destination.startsWith(stagingDirectory + path.sep)) throw new Error("The website renderer manifest contains an invalid path.");
+        await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+        await fs.promises.writeFile(destination, bytes);
+      }
+      await fs.promises.writeFile(path.join(stagingDirectory, "renderer-manifest.json"), JSON.stringify(manifest), "utf8");
+      await fs.promises.rm(rendererDirectory, { recursive: true, force: true });
+      await fs.promises.rename(stagingDirectory, rendererDirectory);
+    } catch (error) {
+      await fs.promises.rm(stagingDirectory, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  return { status: "staged", version };
+}
+
+async function applyStagedRenderer(version) {
+  if (!app.isPackaged || process.platform !== "win32") return { status: "unsupported" };
+  if (typeof version !== "string" || !/^[a-f\d]{64}$/i.test(version)) throw new Error("Invalid website renderer version.");
+  if (version === activeRendererVersion) return { status: "current", version };
+  const directory = path.resolve(RENDERER_ROOT, `release-${version}`);
+  if (!directory.startsWith(RENDERER_ROOT + path.sep)) throw new Error("Invalid website renderer path.");
+  const manifest = JSON.parse(await fs.promises.readFile(path.join(directory, "renderer-manifest.json"), "utf8"));
+  const validated = validateRendererManifest(manifest);
+  if (validated.version !== version || !await rendererDirectoryIsComplete(directory, manifest)) {
+    throw new Error("The staged website renderer is incomplete.");
+  }
+  await activateRenderer(version, directory);
+  return { status: "updated", version };
+}
 
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
@@ -76,6 +237,23 @@ ipcMain.handle("sanky:app:install-update", () => {
   if (!downloadedUpdateVersion) throw new Error("Download the update before installing it.");
   autoUpdater.quitAndInstall(false, true);
   return { status: "installing", version: downloadedUpdateVersion };
+});
+
+ipcMain.handle("sanky:renderer:sync", async () => {
+  try {
+    return await syncRenderer();
+  } catch (error) {
+    console.error("Website renderer sync failed:", error);
+    return { status: "unavailable", message: error instanceof Error ? error.message : String(error) };
+  }
+});
+ipcMain.handle("sanky:renderer:apply", async (_event, version) => {
+  try {
+    return await applyStagedRenderer(version);
+  } catch (error) {
+    console.error("Website renderer activation failed:", error);
+    return { status: "unavailable", message: error instanceof Error ? error.message : String(error) };
+  }
 });
 
 function validHexPayload(hex) {
@@ -210,8 +388,8 @@ function createStaticServer() {
     }
 
     const relativePath = pathname.replace(/^\/+/, "");
-    let filePath = path.resolve(STATIC_ROOT, relativePath);
-    if (!filePath.startsWith(STATIC_ROOT + path.sep) && filePath !== STATIC_ROOT) {
+    let filePath = path.resolve(activeStaticRoot, relativePath);
+    if (!filePath.startsWith(activeStaticRoot + path.sep) && filePath !== activeStaticRoot) {
       response.writeHead(400).end("Invalid path");
       return;
     }
@@ -234,7 +412,7 @@ function createStaticServer() {
       }
       response.writeHead(200, {
         "Content-Type": MIME_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream",
-        "Cache-Control": path.extname(filePath) === ".html" ? "no-store" : "public, max-age=31536000, immutable",
+        "Cache-Control": pathname.startsWith("/_next/static/") ? "public, max-age=31536000, immutable" : "no-store",
         "X-Content-Type-Options": "nosniff",
       });
       response.end(contents);
@@ -243,7 +421,7 @@ function createStaticServer() {
 }
 
 async function startStaticServer() {
-  if (!fs.existsSync(path.join(STATIC_ROOT, "pos", "index.html"))) {
+  if (!fs.existsSync(path.join(activeStaticRoot, "pos", "index.html"))) {
     throw new Error("The POS website files are missing. Rebuild the app before packaging it.");
   }
   staticServer = createStaticServer();
@@ -287,10 +465,10 @@ function createWindow() {
 }
 
 app.setAppUserModelId(APP_ID);
-app.setPath("userData", path.join(app.getPath("appData"), "SankyPOS"));
 
 app.whenReady().then(async () => {
   try {
+    await loadRendererRoot();
     await startStaticServer();
     createWindow();
   } catch (error) {

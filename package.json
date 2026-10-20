@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/create-renderer-manifest.mjs",
     "start": "next start",
     "lint": "next lint",
     "desktop:build": "npm run build && electron-builder --win dir --config.directories.output=release && electron-builder --prepackaged release/win-unpacked --win nsis --config.directories.output=release-installer && electron-builder --prepackaged release/win-unpacked --win portable --config.directories.output=release-portable"

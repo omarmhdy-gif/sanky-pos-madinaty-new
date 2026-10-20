@@ -4,12 +4,9 @@ on:
   push:
     branches: [master]
     paths:
-      - "src/**"
-      - "public/**"
       - "desktop/**"
       - "package.json"
       - "package-lock.json"
-      - "next.config.*"
       - ".github/workflows/desktop-release.yml"
   workflow_dispatch:
 
