@@ -103,7 +103,7 @@ export function ReceiptView({ order }: { order: Order }) {
       <div className="flex justify-between capitalize">
         <span>{t.pos.payment}</span>
         <span>
-          {order.payment.method === "talabat" ? externalPaymentLabel(order.payment, settings, locale) : order.payment.method}
+          {order.payment.method === "talabat" ? externalPaymentLabel(order.payment, settings, locale) : order.payment.method === "card" ? t.pos.card : order.payment.method}
         </span>
       </div>
       {order.payment.tenderedAmount !== undefined && (

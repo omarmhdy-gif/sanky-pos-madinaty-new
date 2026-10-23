@@ -287,7 +287,7 @@ export default function ReportsPage() {
       o.discountAmount,
       o.taxAmount,
       o.total,
-      o.payment.method === "talabat" ? externalPaymentLabel(o.payment, settings, locale) : o.payment.method,
+      o.payment.method === "talabat" ? externalPaymentLabel(o.payment, settings, locale) : o.payment.method === "card" ? t.pos.card : o.payment.method,
       o.cashierName,
       o.status,
     ]),
@@ -308,7 +308,7 @@ export default function ReportsPage() {
   ]);
   const exportVoids = () => downloadCsv(`sanky-void-cancelled-${filter}.csv`, [
     ["Order #", "Date", "Status", "Total", "Payment", "Cashier"],
-    ...voidedOrders.map((o) => [o.orderNumber, o.createdAt, o.status, o.total, o.payment.method, o.cashierName]),
+    ...voidedOrders.map((o) => [o.orderNumber, o.createdAt, o.status, o.total, o.payment.method === "card" ? t.pos.card : o.payment.method, o.cashierName]),
   ]);
   const exportDiscounts = () => downloadCsv(`sanky-discounts-${filter}.csv`, [
     ["Order #", "Date", "Cashier", "Discount %", "Discount Amount", "Subtotal", "Total"],
@@ -425,7 +425,7 @@ export default function ReportsPage() {
           </div>
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm"><thead><tr className="border-b text-xs text-muted-foreground"><th className="py-2 text-start">Order</th><th className="py-2 text-start">Date</th><th className="py-2 text-end">Subtotal</th><th className="py-2 text-end">Discount</th><th className="py-2 text-end">Tax</th><th className="py-2 text-end">Total</th><th className="py-2 text-start">Payment</th></tr></thead><tbody>
-              {(detailsExpanded ? rangeOrders : rangeOrders.slice(0, 10)).map((o) => <tr key={o.id} className="border-b border-border/50"><td className="py-2">#{o.orderNumber}</td><td className="py-2">{dateLabel(o.createdAt)}</td><td className="py-2 text-end">{formatMoney(o.subtotal, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.discountAmount, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.taxAmount, settings.currencySymbol)}</td><td className="py-2 text-end font-medium">{formatMoney(o.total, settings.currencySymbol)}</td><td className="py-2 capitalize">{o.payment.method === "talabat" ? externalPaymentLabel(o.payment, settings, locale) : o.payment.method}</td></tr>)}
+              {(detailsExpanded ? rangeOrders : rangeOrders.slice(0, 10)).map((o) => <tr key={o.id} className="border-b border-border/50"><td className="py-2">#{o.orderNumber}</td><td className="py-2">{dateLabel(o.createdAt)}</td><td className="py-2 text-end">{formatMoney(o.subtotal, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.discountAmount, settings.currencySymbol)}</td><td className="py-2 text-end">{formatMoney(o.taxAmount, settings.currencySymbol)}</td><td className="py-2 text-end font-medium">{formatMoney(o.total, settings.currencySymbol)}</td><td className="py-2 capitalize">{o.payment.method === "talabat" ? externalPaymentLabel(o.payment, settings, locale) : o.payment.method === "card" ? t.pos.card : o.payment.method}</td></tr>)}
             </tbody></table>
           </div>
           {rangeOrders.length > 10 && <SeeMoreButton total={rangeOrders.length} expanded={detailsExpanded} onToggle={() => setDetailsExpanded((v) => !v)} />}
@@ -486,7 +486,7 @@ export default function ReportsPage() {
         <ReportSection title={locale === "ar" ? "تقرير العهدات" : "Cash Till Report"} icon={<RefreshCw className="h-4 w-4" />} exportAction={exportCash}>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <SummaryCard label="Cash Sales" value={formatMoney(reconciliation.cash, settings.currencySymbol)} positive />
-            <SummaryCard label="Card Sales" value={formatMoney(reconciliation.card, settings.currencySymbol)} />
+            <SummaryCard label={locale === "ar" ? "مبيعات فيزا" : "Visa Sales"} value={formatMoney(reconciliation.card, settings.currencySymbol)} />
             <SummaryCard label="Expected Cash" value={formatMoney(reconciliation.expected, settings.currencySymbol)} />
             <SummaryCard label="Actual Cash" value={formatMoney(reconciliation.actual, settings.currencySymbol)} />
             <SummaryCard label="Difference" value={formatMoney(reconciliation.difference, settings.currencySymbol)} positive={reconciliation.difference >= 0} />

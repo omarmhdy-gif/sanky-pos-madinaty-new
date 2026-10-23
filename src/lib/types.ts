@@ -76,12 +76,12 @@ export interface CartLine {
   note?: string;
 }
 
-// "talabat" is external marketplace revenue, not a real till payment — an
-// order paid this way still deducts inventory/prints/appears in Orders
-// exactly like any other, but is deliberately excluded from every POS
-// revenue/cash figure (Dashboard, Reports KPIs, Shift totals, cash
-// reconciliation) and tracked in its own separate section instead. See
-// lib/analytics.ts's posOrders()/talabatOrders().
+// "talabat" without externalMethodId is legacy external marketplace revenue,
+// deliberately excluded from POS revenue and tracked separately. Configured
+// external tenders (such as InstaPay) also use "talabat" for compatibility,
+// but carry externalMethodId and remain ordinary POS orders; only their
+// payment-method breakdown is separate. See analytics.ts's
+// posOrders()/talabatOrders().
 // "waste" represents discarded product, not revenue at all — no payment is
 // collected (see Order.wasteReason, mandatory when this method is used). It
 // still deducts inventory/recipes exactly like a normal sale, but is
@@ -103,8 +103,9 @@ export interface OrderPayment {
   tenderedAmount?: number; // for cash
   changeDue?: number;
   splitParts?: SplitPaymentPart[];
-  /** External method metadata; `method` remains "talabat" so shift closing
-   * continues to exclude marketplace orders from cash/card reconciliation. */
+  /** Configured tender metadata. `method` remains "talabat" for storage
+   * compatibility; a present ID distinguishes a POS tender from a legacy
+   * marketplace order. */
   externalMethodId?: string;
   externalMethodName?: { en: string; ar: string };
   externalMethodIcon?: string;

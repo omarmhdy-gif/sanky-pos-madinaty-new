@@ -55,7 +55,10 @@ export function completedOrders(orders: Order[]): Order[] {
 }
 
 export function isTalabatOrder(o: Order): boolean {
-  return o.payment.method === "talabat";
+  // Configured external tenders (for example InstaPay) are still ordinary
+  // POS orders. Only legacy marketplace orders without a configured tender ID
+  // belong in the separate Talabat/marketplace reporting bucket.
+  return o.payment.method === "talabat" && !o.payment.externalMethodId;
 }
 
 /** Discarded product, not revenue — see PaymentMethod's "waste" doc comment
@@ -66,17 +69,18 @@ export function isWasteOrder(o: Order): boolean {
 
 /** Every POS revenue/cash figure (Dashboard, Reports KPIs, shift totals,
  * cash reconciliation, payment-method totals) must be computed from this,
- * never from completedOrders() directly — Talabat is external marketplace
- * revenue and Waste is discarded product, both tracked completely
- * separately (see talabatOrders()/wasteOrders() below), neither part of
- * till sales. Inventory/recipe/product-stat consumers (topProducts, stock
+ * never from completedOrders() directly — legacy marketplace orders and
+ * Waste are tracked separately (see talabatOrders()/wasteOrders() below),
+ * neither part of till sales. Configured external tenders remain POS sales.
+ * Inventory/recipe/product-stat consumers (topProducts, stock
  * deduction) are unaffected and keep using completedOrders(). */
 export function posOrders(orders: Order[]): Order[] {
   return completedOrders(orders).filter((o) => !isTalabatOrder(o) && !isWasteOrder(o));
 }
 
-/** Talabat-only completed orders — external marketplace revenue, reported
- * in its own separate section everywhere (Dashboard, Reports, Shift Report). */
+/** Legacy marketplace orders — external marketplace revenue, reported in
+ * its own separate section everywhere (Dashboard, Reports, Shift Report).
+ * Configured external tender methods carry externalMethodId and stay in POS. */
 export function talabatOrders(orders: Order[]): Order[] {
   return completedOrders(orders).filter(isTalabatOrder);
 }

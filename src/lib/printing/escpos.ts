@@ -13,6 +13,7 @@ function paymentMethodLabel(order: Order, settings: ShopSettings, locale: "en" |
   const method = order.payment.method;
   if (method === "talabat") return externalPaymentLabel(order.payment, settings, locale);
   if (method === "waste") return "Waste";
+  if (method === "card") return "Visa";
   return method.charAt(0).toUpperCase() + method.slice(1);
 }
 
@@ -148,7 +149,7 @@ export function buildShiftReportBytes(shift: Shift, settings: ShopSettings, bran
   line(`Orders: ${shift.ordersCount ?? 0}`);
   line("--------------------------------");
   line(`Cash Sales: ${formatMoney(shift.cashSales ?? 0, settings.currencySymbol)}`);
-  line(`Card Sales: ${formatMoney(shift.cardSales ?? 0, settings.currencySymbol)}`);
+  line(`Non-cash Sales: ${formatMoney(shift.cardSales ?? 0, settings.currencySymbol)}`);
   line("--------------------------------");
   line(`Opening Cash: ${formatMoney(shift.openingCash, settings.currencySymbol)}`);
   line(`Expected Cash: ${formatMoney(shift.expectedCash ?? 0, settings.currencySymbol)}`);
