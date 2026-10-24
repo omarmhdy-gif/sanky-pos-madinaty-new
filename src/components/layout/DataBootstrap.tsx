@@ -38,12 +38,34 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
     }
 
     let active = true;
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (
+        event === "PASSWORD_RECOVERY" &&
+        session &&
+        window.location.pathname !== "/reset-password/" &&
+        window.location.pathname !== "/reset-password"
+      ) {
+        window.location.replace("/reset-password/");
+      }
+    });
+
+    // Some email clients strip or override the requested redirect path. The
+    // Supabase client may already have exchanged the recovery code by then, so
+    // also honor the recovery marker from the callback URL on initial load.
+    const callbackParams = new URLSearchParams(`${window.location.search}&${window.location.hash.slice(1)}`);
+    if (callbackParams.get("type") === "recovery") {
+      window.location.replace(`/reset-password/${window.location.search}${window.location.hash}`);
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
       if (!data.session) logout();
       setAuthReady(true);
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
   }, [logout]);
 
   useEffect(() => {
