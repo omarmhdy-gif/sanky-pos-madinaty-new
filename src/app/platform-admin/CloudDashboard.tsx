@@ -1,0 +1,160 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Activity, BadgeCheck, Building2, CalendarDays, Check, ChevronLeft, CircleDollarSign, Clock3, Copy, CreditCard, KeyRound, LogOut, Plus, RefreshCw, Search, ShieldCheck, Store, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { platformSupabase } from "@/lib/supabase/platformClient";
+import type { Session } from "@supabase/supabase-js";
+
+type Plan = "starter" | "growth" | "premium";
+type Shop = {
+  id: string; account_number: string; name: string; owner_email: string; plan: Plan;
+  status: "active" | "trial" | "suspended"; modules: string[]; monthly_fee: number | null;
+  currency: string; expires_at: string | null; branch_limit: number; device_limit: number;
+  allow_negative_stock: boolean; notes: string; created_at: string;
+};
+type Payment = { id: string; shop_id: string; amount: number; paid_on: string; period_end: string };
+type AuthMode = "login" | "signup" | "forgot" | "update";
+
+const OWNER_EMAIL = "omarmhdy@gmail.com";
+const plans: Record<Plan, string> = { starter: "الكاشير", growth: "الكاشير + HR + المخزون", premium: "الباقة الأعلى" };
+const statuses = { active: "نشط", trial: "تجربة", suspended: "موقوف" } as const;
+const modules = [["pos", "الكاشير"], ["orders", "الطلبات"], ["reports", "التقارير"], ["delivery", "التوصيل"], ["hr", "HR"], ["inventory", "المخزون"], ["loyalty", "الولاء"], ["finance", "المالية"], ["tables", "الطاولات"]];
+const basicModules = ["pos", "orders", "reports", "delivery"];
+const modulesFor = (p: Plan) => p === "starter" ? basicModules : p === "growth" ? [...basicModules, "hr", "inventory"] : [...basicModules, "hr", "inventory", "loyalty", "finance"];
+const money = (n: number | null, currency = "EGP") => n == null ? "غير محدد" : new Intl.NumberFormat("ar-EG", { style: "currency", currency, maximumFractionDigits: 0 }).format(n);
+const date = (v: string | null) => v ? new Date(v + "T00:00:00").toLocaleDateString("ar-EG") : "غير محدد";
+
+export default function CloudDashboard() {
+  const db = platformSupabase;
+  const [session, setSession] = useState<Session | null>(null);
+  const [booting, setBooting] = useState(true);
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [authMessage, setAuthMessage] = useState("");
+  const [email, setEmail] = useState(OWNER_EMAIL);
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [authorized, setAuthorized] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [shops, setShops] = useState<Shop[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [draft, setDraft] = useState<Shop | null>(null);
+  const [query, setQuery] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [newShop, setNewShop] = useState({ name: "", email: "", plan: "starter" as Plan, fee: "", branches: "1", devices: "1", expires: "", modules: basicModules });
+
+  useEffect(() => {
+    if (!db) { setBooting(false); return; }
+    let alive = true;
+    const { data: { subscription } } = db.auth.onAuthStateChange((event, next) => {
+      if (!alive) return;
+      setSession(next);
+      if (event === "PASSWORD_RECOVERY") setMode("update");
+      if (event === "SIGNED_OUT") { setAuthorized(false); setShops([]); setPayments([]); }
+    });
+    void db.auth.getSession().then(({ data }) => { if (alive) { setSession(data.session); setBooting(false); } });
+    return () => { alive = false; subscription.unsubscribe(); };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (!db || !session) return;
+    setLoading(true); setError("");
+    const { data: allowed, error: authError } = await db.rpc("platform_admin_is_allowed");
+    if (authError) { setError(authError.message); setLoading(false); return; }
+    if (!allowed) { setAuthorized(false); setLoading(false); return; }
+    const [s, p] = await Promise.all([
+      db.from("platform_shops").select("*").order("created_at", { ascending: false }),
+      db.from("platform_payments").select("*").order("paid_on", { ascending: false }).limit(200),
+    ]);
+    if (s.error || p.error) { setError(s.error?.message || p.error?.message || "تعذر تحميل البيانات."); setLoading(false); return; }
+    const rows = (s.data ?? []) as Shop[];
+    setShops(rows); setPayments((p.data ?? []) as Payment[]); setAuthorized(true);
+    setSelectedId((id) => id && rows.some((row) => row.id === id) ? id : rows[0]?.id ?? "");
+    setDraft((old) => old ? rows.find((row) => row.id === old.id) ?? rows[0] ?? null : rows[0] ?? null);
+    setLoading(false);
+  }, [session]);
+
+  useEffect(() => { if (session) void refresh(); }, [session, refresh]);
+
+  const selected = shops.find((s) => s.id === selectedId) ?? shops[0] ?? null;
+  const editing = draft?.id === selected?.id ? draft : selected;
+  const dirty = Boolean(selected && editing && JSON.stringify(selected) !== JSON.stringify(editing));
+  const filtered = useMemo(() => shops.filter((s) => (s.name + " " + s.account_number + " " + s.owner_email).toLowerCase().includes(query.toLowerCase())), [shops, query]);
+  const active = shops.filter((s) => s.status === "active").length;
+  const trials = shops.filter((s) => s.status === "trial").length;
+  const revenue = shops.reduce((sum, s) => sum + (s.status === "active" ? Number(s.monthly_fee ?? 0) : 0), 0);
+  const expiring = shops.filter((s) => { if (!s.expires_at || s.status !== "active") return false; const days = (new Date(s.expires_at + "T00:00:00").getTime() - Date.now()) / 86400000; return days >= 0 && days <= 7; }).length;
+
+  const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); if (!db) return; setLoading(true); setAuthMessage("");
+    const normalized = email.trim().toLowerCase();
+    if (normalized !== OWNER_EMAIL) { setAuthMessage("هذا البريد غير مخوّل بالدخول إلى لوحة مالك المنصة."); setLoading(false); return; }
+    if (mode === "signup") {
+      const { error: e } = await db.auth.signUp({ email: normalized, password, options: { emailRedirectTo: window.location.origin + "/platform-admin/" } });
+      setAuthMessage(e ? e.message : "أُرسل رابط تأكيد للمالك. افتح البريد لتأكيد الحساب، ثم سجّل الدخول هنا.");
+    } else if (mode === "forgot") {
+      const { error: e } = await db.auth.resetPasswordForEmail(normalized, { redirectTo: window.location.origin + "/platform-admin/" });
+      setAuthMessage(e ? e.message : "إذا كان الحساب موجودًا، سيصلك رابط استعادة كلمة المرور.");
+    } else if (mode === "update") {
+      const { error: e } = await db.auth.updateUser({ password: newPassword });
+      setAuthMessage(e ? e.message : "تم تحديث كلمة المرور."); if (!e) setMode("login");
+    } else {
+      const { error: e } = await db.auth.signInWithPassword({ email: normalized, password });
+      setAuthMessage(e ? e.message : "");
+    }
+    setLoading(false);
+  };
+
+  if (!db) return <AuthFrame><Notice title="إعداد قاعدة الإدارة ناقص" text="أضف متغيري NEXT_PUBLIC_PLATFORM_SUPABASE_URL وNEXT_PUBLIC_PLATFORM_SUPABASE_PUBLISHABLE_KEY إلى Vercel ثم أعد النشر." /></AuthFrame>;
+  if (booting || (session && loading && !authorized)) return <AuthFrame><p className="text-stone-300"><RefreshCw className="ml-2 inline h-4 w-4 animate-spin" /> جارٍ التحقق من الحساب...</p></AuthFrame>;
+  if (!session) return <AuthFrame><section className="w-full max-w-md rounded-3xl border border-white/10 bg-[#14221b] p-6 shadow-2xl sm:p-8"><Brand /><p className="mb-5 text-sm leading-6 text-stone-400">لوحة مركزية لإدارة الاشتراكات. بيانات التشغيل تظل في قاعدة كل محل.</p><form onSubmit={submitAuth} className="space-y-4"><Field label="البريد الإلكتروني"><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field>{mode === "update" ? <Field label="كلمة المرور الجديدة"><Input type="password" minLength={8} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field> : (mode === "login" || mode === "signup") && <Field label="كلمة المرور"><Input type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field>}<Button disabled={loading} className="w-full bg-amber-200 text-[#14221b] hover:bg-amber-100">{loading ? "جارٍ التنفيذ..." : mode === "signup" ? "إنشاء حساب المالك" : mode === "forgot" ? "إرسال رابط الاستعادة" : mode === "update" ? "حفظ كلمة المرور" : "دخول آمن"}</Button></form>{authMessage && <p role="status" className="mt-4 rounded-xl border border-white/10 p-3 text-sm leading-6 text-stone-300">{authMessage}</p>}<div className="mt-5 flex flex-wrap justify-between gap-3 text-sm">{mode === "login" ? <><button onClick={() => { setMode("forgot"); setAuthMessage(""); }} className="text-amber-200">نسيت كلمة المرور؟</button><button onClick={() => { setMode("signup"); setAuthMessage(""); }} className="text-stone-400">أول مرة؟ أنشئ حساب المالك</button></> : <button onClick={() => { setMode("login"); setAuthMessage(""); }} className="text-amber-200">العودة للدخول</button>}</div></section></AuthFrame>;
+  if (!authorized) return <AuthFrame><section className="max-w-lg rounded-3xl border border-rose-300/20 bg-[#14221b] p-7 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-rose-300" /><h1 className="mt-4 text-xl font-bold">الحساب غير مخوّل</h1><p className="mt-2 text-sm text-stone-400">هذا الحساب لا يملك صلاحية مالك المنصة.</p><Button onClick={() => void db.auth.signOut()} className="mt-5 bg-white/10 text-white">تسجيل الخروج</Button></section></AuthFrame>;
+
+  const updateDraft = (patch: Partial<Shop>) => editing && setDraft({ ...editing, ...patch });
+  const audit = async (action: string, shop: Shop, details: Record<string, unknown>) => { if (session.user.email) await db.from("platform_audit_log").insert({ actor_email: session.user.email, action, entity_type: "shop", entity_id: shop.id, details }); };
+  const saveShop = async () => {
+    if (!editing) return; setLoading(true); setError("");
+    const { data, error: e } = await db.from("platform_shops").update({ name: editing.name.trim(), owner_email: editing.owner_email.trim().toLowerCase(), plan: editing.plan, status: editing.status, modules: editing.modules, monthly_fee: editing.monthly_fee, expires_at: editing.expires_at || null, branch_limit: editing.branch_limit, device_limit: editing.device_limit, allow_negative_stock: editing.allow_negative_stock, notes: editing.notes }).eq("id", editing.id).select("*").single();
+    if (e) setError(e.message); else { const row = data as Shop; setShops((old) => old.map((s) => s.id === row.id ? row : s)); setDraft(row); await audit("shop_updated", row, { plan: row.plan, status: row.status }); setNotice("تم حفظ بيانات المشترك في قاعدة الإدارة."); }
+    setLoading(false);
+  };
+  const addShop = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setLoading(true); setError("");
+    const { data, error: e } = await db.rpc("platform_create_shop", { p_name: newShop.name.trim(), p_owner_email: newShop.email.trim().toLowerCase(), p_plan: newShop.plan, p_modules: newShop.modules, p_monthly_fee: newShop.fee === "" ? null : Number(newShop.fee), p_branch_limit: Number(newShop.branches), p_device_limit: Number(newShop.devices), p_expires_at: newShop.expires || null });
+    if (e) setError(e.message); else { const row = data as Shop; setShops((old) => [row, ...old]); setSelectedId(row.id); setDraft(row); setShowCreate(false); setNotice("تم إنشاء المحل برقم " + row.account_number + "."); if (session.user.email) await db.from("platform_audit_log").insert({ actor_email: session.user.email, action: "shop_created", entity_type: "shop", entity_id: row.id, details: { account_number: row.account_number } }); }
+    setLoading(false);
+  };
+  const payment = async (amount: number, note: string) => {
+    if (!selected) return; setLoading(true); setError("");
+    const { error: e } = await db.rpc("platform_record_payment", { p_shop_id: selected.id, p_amount: amount, p_note: note });
+    if (e) setError(e.message); else { setNotice("تم تسجيل الدفعة وتجديد الاشتراك شهرًا."); await refresh(); }
+    setLoading(false);
+  };
+
+  return <main dir="rtl" className="min-h-screen bg-[#0d1713] text-stone-100"><div className="mx-auto max-w-[1550px] p-4 sm:p-7">
+    <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-amber-200/15 bg-gradient-to-l from-[#203126] to-[#14211a] p-5"><div><p className="text-xs tracking-[0.18em] text-amber-200">SANKY PLATFORM</p><h1 className="mt-1 text-2xl font-bold">لوحة التحكم الرئيسية</h1><p className="mt-1 text-sm text-stone-400">إدارة المشتركين والاشتراكات من قاعدة مركزية مستقلة.</p></div><div className="flex items-center gap-2"><span className="hidden items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200 sm:flex"><i className="h-2 w-2 rounded-full bg-emerald-400" /> متصل بالسحابة</span><Button variant="outline" onClick={() => void refresh()} className="border-white/10 text-stone-200"><RefreshCw className="h-4 w-4" /> تحديث</Button><span className="rounded-xl bg-white/[0.05] px-3 py-2 text-xs">{session.user.email}</span><button onClick={() => void db.auth.signOut()} aria-label="تسجيل الخروج" className="rounded-xl border border-white/10 p-2.5 text-stone-400"><LogOut className="h-4 w-4" /></button></div></header>
+    <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Metric icon={<Store />} title="المحلات" value={shops.length} /><Metric icon={<BadgeCheck />} title="اشتراكات نشطة" value={active} /><Metric icon={<Clock3 />} title="فترات تجربة" value={trials} /><Metric icon={<CircleDollarSign />} title="الإيراد الشهري المتوقع" value={money(revenue)} /></section>
+    <section className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-amber-200/15 bg-[#1b2a21] p-4"><div><h2 className="font-bold">المتابعة والتنبيهات</h2><p className="mt-1 text-sm text-stone-400">{expiring ? "هناك اشتراكات تنتهي خلال 7 أيام." : "لا توجد اشتراكات قريبة من الانتهاء."}</p></div><span className="rounded-xl border border-white/10 px-3 py-2 text-sm"><CalendarDays className="ml-2 inline h-4 w-4 text-amber-200" />تنتهي قريبًا: {expiring}</span></section>
+    <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/10 bg-[#14221b] p-4"><div><h2 className="font-bold">إصدارات Sanky POS</h2><p className="mt-1 text-xs text-stone-400">زر نشر التحديثات يحتاج ربطًا آمنًا بخط نشر Vercel؛ لن نسجل نشرًا وهميًا.</p></div><Button disabled className="bg-white/[0.06] text-stone-500"><Activity className="h-4 w-4" /> ربط النشر مطلوب</Button></section>
+    <div className="grid items-start gap-5 2xl:grid-cols-[1.05fr_0.95fr]"><section className="overflow-hidden rounded-3xl border border-white/10 bg-[#14221b]"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-4"><div><h2 className="text-lg font-bold">المحلات والاشتراكات</h2><p className="mt-1 text-xs text-stone-400">لا تحتوي قاعدة الإدارة على مبيعات العملاء.</p></div><Button onClick={() => setShowCreate(true)} className="bg-amber-200 text-[#14221b]"><Plus className="h-4 w-4" /> إضافة محل</Button></div><div className="p-4"><div className="relative"><Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="بحث بالاسم أو رقم الحساب أو البريد" className="border-white/10 bg-[#0e1914] pr-10 text-stone-100" /></div></div><div className="divide-y divide-white/[0.07]">{filtered.map((shop) => <button key={shop.id} onClick={() => { setSelectedId(shop.id); setDraft(shop); }} className={"flex w-full items-center gap-3 px-4 py-4 text-right hover:bg-white/[0.035] " + (selected?.id === shop.id ? "bg-amber-200/[0.06]" : "")}><div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-200/10 text-amber-200"><Store className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><b className="truncate">{shop.name}</b><span className={"rounded-full px-2 py-0.5 text-[10px] " + statusColor(shop.status)}>{statuses[shop.status]}</span></div><div className="mt-1 flex flex-wrap gap-3 text-xs text-stone-400"><span>حساب {shop.account_number}</span><span>{plans[shop.plan]}</span><span className="truncate">{shop.owner_email}</span></div></div><div className="hidden text-left sm:block"><b>{money(shop.monthly_fee)}</b><p className="mt-1 text-xs text-stone-500">حتى {date(shop.expires_at)}</p></div><ChevronLeft className="h-4 w-4 text-stone-500" /></button>)}{!filtered.length && <p className="p-8 text-center text-sm text-stone-400">لا توجد محلات مطابقة.</p>}</div></section>
+    {selected && editing && <section className="rounded-3xl border border-white/10 bg-[#14221b] p-4 sm:p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-bold">تفاصيل المشترك</h2><p className="mt-1 text-sm text-stone-400">{selected.account_number === "0000" ? "أول عميل: سانكي" : "حساب عميل"}</p></div><ShieldCheck className="h-5 w-5 text-emerald-300" /></div><div className="mb-4 flex items-center justify-between rounded-xl border border-white/10 bg-[#0e1914] px-3 py-2 text-sm"><span>رقم الحساب <b className="mr-2 font-mono tracking-widest">{editing.account_number}</b></span><button aria-label="نسخ" onClick={() => { void navigator.clipboard?.writeText(editing.account_number); setNotice("تم نسخ رقم الحساب."); }}><Copy className="h-4 w-4 text-stone-400" /></button></div><div className="grid gap-3 sm:grid-cols-2"><Field label="اسم المحل"><Input value={editing.name} onChange={(e) => updateDraft({ name: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="بريد المالك"><Input type="email" value={editing.owner_email} onChange={(e) => updateDraft({ owner_email: e.target.value.toLowerCase() })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="الباقة"><select value={editing.plan} onChange={(e) => updateDraft({ plan: e.target.value as Plan })} className="h-10 w-full rounded-xl border border-white/10 bg-[#0e1914] px-3 text-sm text-stone-100">{Object.entries(plans).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field><Field label="الحالة"><select value={editing.status} onChange={(e) => updateDraft({ status: e.target.value as Shop["status"] })} className="h-10 w-full rounded-xl border border-white/10 bg-[#0e1914] px-3 text-sm text-stone-100">{Object.entries(statuses).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field><Field label="السعر الشهري"><Input type="number" min="0" step="0.01" value={editing.monthly_fee ?? ""} onChange={(e) => updateDraft({ monthly_fee: e.target.value === "" ? null : Number(e.target.value) })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="تاريخ الانتهاء"><Input type="date" value={editing.expires_at ?? ""} onChange={(e) => updateDraft({ expires_at: e.target.value || null })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="حد الفروع"><Input type="number" min="1" value={editing.branch_limit} onChange={(e) => updateDraft({ branch_limit: Math.max(1, Number(e.target.value)) })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="حد الأجهزة"><Input type="number" min="1" value={editing.device_limit} onChange={(e) => updateDraft({ device_limit: Math.max(1, Number(e.target.value)) })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="السماح بالبيع عند نفاد المخزون"><select value={editing.allow_negative_stock ? "yes" : "no"} onChange={(e) => updateDraft({ allow_negative_stock: e.target.value === "yes" })} className="h-10 w-full rounded-xl border border-white/10 bg-[#0e1914] px-3 text-sm text-stone-100"><option value="no">لا</option><option value="yes">نعم</option></select></Field></div><div className="my-4"><p className="mb-2 text-xs text-stone-400">الموديولات</p><ModulePicker value={editing.modules} onChange={(v) => updateDraft({ modules: v })} /></div><Field label="ملاحظات"><Input value={editing.notes} onChange={(e) => updateDraft({ notes: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><div className="mt-4 flex gap-2"><Button disabled={!dirty || loading} onClick={() => void saveShop()} className="bg-amber-200 text-[#14221b]"><Check className="h-4 w-4" /> حفظ</Button><Button disabled={!dirty || loading} variant="outline" onClick={() => setDraft(selected)} className="border-white/10">إلغاء</Button></div><PaymentForm disabled={loading} onSubmit={payment} /><div className="mt-4 rounded-2xl border border-white/[0.07] p-3"><p className="mb-2 text-sm font-semibold"><CreditCard className="ml-2 inline h-4 w-4 text-amber-200" />آخر الدفعات</p>{payments.filter((p) => p.shop_id === selected.id).slice(0, 4).map((p) => <div key={p.id} className="flex justify-between border-t border-white/[0.07] py-2 text-xs"><span>{date(p.paid_on)} · حتى {date(p.period_end)}</span><b className="text-emerald-200">{money(Number(p.amount))}</b></div>)}{!payments.some((p) => p.shop_id === selected.id) && <p className="text-xs text-stone-500">لا توجد دفعات مسجلة.</p>}</div><div className="mt-4 rounded-xl border border-sky-300/10 bg-sky-300/[0.04] p-3 text-xs leading-5 text-sky-100/70"><KeyRound className="ml-2 inline h-4 w-4" />أكواد تفعيل الأجهزة والفروع ستظهر بعد ربطها بواجهة التفعيل الفعلية.</div></section>}</div>
+    {error && <p role="alert" className="mt-4 rounded-xl border border-rose-300/20 bg-rose-300/[0.05] p-3 text-sm text-rose-200">{error}</p>}
+    <footer className="mt-7 flex flex-wrap justify-between gap-2 border-t border-white/[0.07] py-4 text-xs text-stone-500"><span>بيانات اشتراك وتعريف فقط — بلا مبيعات أو بيانات تشغيل.</span><span><ShieldCheck className="ml-1 inline h-4 w-4 text-emerald-300" />قاعدة مستقلة</span></footer>
+    {notice && <div role="status" className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-amber-200/20 bg-[#1d2b24] px-4 py-3 text-sm shadow-2xl">{notice}<button onClick={() => setNotice("")} aria-label="إغلاق"><X className="h-4 w-4" /></button></div>}
+    {showCreate && <CreateDialog value={newShop} setValue={setNewShop} loading={loading} close={() => setShowCreate(false)} submit={addShop} />}
+  </div></main>;
+}
+
+function AuthFrame({ children }: { children: React.ReactNode }) { return <main dir="rtl" className="grid min-h-screen place-items-center bg-[#0d1713] p-5 text-stone-100">{children}</main>; }
+function Brand() { return <div className="mb-6 flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-200 text-[#14221b]"><Building2 className="h-6 w-6" /></div><div><p className="text-xs tracking-[0.18em] text-amber-200">SANKY PLATFORM</p><h1 className="mt-1 text-2xl font-bold">دخول مالك المنصة</h1></div></div>; }
+function Notice({ title, text }: { title: string; text: string }) { return <div className="max-w-lg rounded-2xl border border-rose-300/20 bg-[#14221b] p-6"><h1 className="font-bold">{title}</h1><p className="mt-2 text-sm leading-6 text-stone-400">{text}</p></div>; }
+function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="block min-w-0 text-sm"><span className="mb-1.5 block text-xs text-stone-400">{label}</span>{children}</label>; }
+function Metric({ icon, title, value }: { icon: React.ReactNode; title: string; value: React.ReactNode }) { return <div className="rounded-2xl border border-white/[0.08] bg-[#14221b] p-4"><div className="flex items-center justify-between"><span className="text-sm text-stone-400">{title}</span><span className="text-amber-200 [&>svg]:h-5 [&>svg]:w-5">{icon}</span></div><div className="mt-3 text-2xl font-bold">{value}</div></div>; }
+function statusColor(status: Shop["status"]) { return status === "active" ? "bg-emerald-400/10 text-emerald-300" : status === "trial" ? "bg-sky-400/10 text-sky-300" : "bg-rose-400/10 text-rose-300"; }
+function ModulePicker({ value, onChange }: { value: string[]; onChange: (value: string[]) => void }) { return <div className="flex flex-wrap gap-2">{modules.map(([id, name]) => <button key={id} type="button" aria-pressed={value.includes(id)} onClick={() => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id])} className={"rounded-xl border px-3 py-2 text-xs " + (value.includes(id) ? "border-amber-200/25 bg-amber-200/10 text-amber-100" : "border-white/10 text-stone-500")}>{value.includes(id) && <Check className="ml-1 inline h-3.5 w-3.5" />}{name}</button>)}</div>; }
+function PaymentForm({ onSubmit, disabled }: { onSubmit: (amount: number, note: string) => void; disabled: boolean }) { const [amount, setAmount] = useState(""); const [note, setNote] = useState(""); return <div className="mt-5 rounded-2xl border border-white/[0.07] bg-black/10 p-4"><p className="mb-3 text-sm font-semibold"><CreditCard className="ml-2 inline h-4 w-4 text-amber-200" />تسجيل دفعة وتجديد شهر</p><form className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]" onSubmit={(e) => { e.preventDefault(); if (Number(amount) > 0) { onSubmit(Number(amount), note); setAmount(""); setNote(""); } }}><Input required type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="المبلغ" className="border-white/10 bg-[#0e1914] text-stone-100" /><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="ملاحظة اختيارية" className="border-white/10 bg-[#0e1914] text-stone-100" /><Button disabled={disabled} type="submit" className="bg-emerald-400/15 text-emerald-200">تسجيل</Button></form></div>; }
+function CreateDialog({ value, setValue, loading, close, submit }: { value: { name: string; email: string; plan: Plan; fee: string; branches: string; devices: string; expires: string; modules: string[] }; setValue: (v: typeof value) => void; loading: boolean; close: () => void; submit: (e: FormEvent<HTMLFormElement>) => void }) { const patch = (p: Partial<typeof value>) => setValue({ ...value, ...p }); return <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}><section role="dialog" aria-modal="true" aria-labelledby="create-shop-title" className="my-auto w-full max-w-2xl rounded-3xl border border-white/10 bg-[#17241d] p-5 shadow-2xl"><div className="mb-5 flex justify-between"><div><h2 id="create-shop-title" className="text-xl font-bold">إضافة محل جديد</h2><p className="mt-1 text-sm text-stone-400">رقم الحساب من 4 أرقام، والبيانات التشغيلية تبدأ فارغة.</p></div><button onClick={close} aria-label="إغلاق"><X className="h-5 w-5 text-stone-400" /></button></div><form onSubmit={submit} className="grid gap-4 sm:grid-cols-2"><Field label="اسم المحل"><Input required value={value.name} onChange={(e) => patch({ name: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="بريد المالك"><Input type="email" required value={value.email} onChange={(e) => patch({ email: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="الباقة"><select value={value.plan} onChange={(e) => { const p = e.target.value as Plan; patch({ plan: p, modules: modulesFor(p) }); }} className="h-10 w-full rounded-xl border border-white/10 bg-[#0e1914] px-3 text-sm text-stone-100">{Object.entries(plans).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field><Field label="السعر الشهري"><Input type="number" min="0" step="0.01" value={value.fee} onChange={(e) => patch({ fee: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="حد الفروع"><Input type="number" min="1" required value={value.branches} onChange={(e) => patch({ branches: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="حد الأجهزة"><Input type="number" min="1" required value={value.devices} onChange={(e) => patch({ devices: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Field label="نهاية التجربة"><Input type="date" value={value.expires} onChange={(e) => patch({ expires: e.target.value })} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><div className="sm:col-span-2"><p className="mb-2 text-xs text-stone-400">الموديولات</p><ModulePicker value={value.modules} onChange={(v) => patch({ modules: v })} /></div><div className="flex gap-2 sm:col-span-2"><Button type="button" variant="outline" onClick={close} className="border-white/10">إلغاء</Button><Button disabled={loading} type="submit" className="bg-amber-200 text-[#14221b]"><Plus className="h-4 w-4" /> إنشاء المحل</Button></div></form></section></div>; }
