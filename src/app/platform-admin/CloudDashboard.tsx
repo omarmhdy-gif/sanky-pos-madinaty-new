@@ -15,7 +15,7 @@ type Shop = {
   allow_negative_stock: boolean; notes: string; created_at: string;
 };
 type Payment = { id: string; shop_id: string; amount: number; paid_on: string; period_end: string };
-type AuthMode = "login" | "signup" | "forgot" | "update";
+type AuthMode = "login" | "forgot" | "update";
 
 const OWNER_EMAIL = "omarmhdy@gmail.com";
 const plans: Record<Plan, string> = { starter: "الكاشير", growth: "الكاشير + HR + المخزون", premium: "الباقة الأعلى" };
@@ -91,17 +91,15 @@ export default function CloudDashboard() {
 
   const submitAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); if (!db) return; setLoading(true); setAuthMessage("");
-    const normalized = email.trim().toLowerCase();
-    if (normalized !== OWNER_EMAIL) { setAuthMessage("هذا البريد غير مخوّل بالدخول إلى لوحة مالك المنصة."); setLoading(false); return; }
-    if (mode === "signup") {
-      const { error: e } = await db.auth.signUp({ email: normalized, password, options: { emailRedirectTo: window.location.origin + "/platform-admin/" } });
-      setAuthMessage(e ? e.message : "أُرسل رابط تأكيد للمالك. افتح البريد لتأكيد الحساب، ثم سجّل الدخول هنا.");
-    } else if (mode === "forgot") {
+    const normalized = (mode === "update" ? session?.user.email : email)?.trim().toLowerCase() ?? "";
+    if (mode !== "update" && normalized !== OWNER_EMAIL) { setAuthMessage("هذا البريد غير مخوّل بالدخول إلى لوحة مالك المنصة."); setLoading(false); return; }
+    if (mode === "forgot") {
       const { error: e } = await db.auth.resetPasswordForEmail(normalized, { redirectTo: window.location.origin + "/platform-admin/" });
       setAuthMessage(e ? e.message : "إذا كان الحساب موجودًا، سيصلك رابط استعادة كلمة المرور.");
     } else if (mode === "update") {
       const { error: e } = await db.auth.updateUser({ password: newPassword });
-      setAuthMessage(e ? e.message : "تم تحديث كلمة المرور."); if (!e) setMode("login");
+      setAuthMessage(e ? e.message : "تم تحديث كلمة المرور. سجّل الدخول بكلمة المرور الجديدة.");
+      if (!e) { await db.auth.signOut(); setPassword(""); setNewPassword(""); setMode("login"); }
     } else {
       const { error: e } = await db.auth.signInWithPassword({ email: normalized, password });
       setAuthMessage(e ? e.message : "");
@@ -111,8 +109,10 @@ export default function CloudDashboard() {
 
   if (!db) return <AuthFrame><Notice title="إعداد قاعدة الإدارة ناقص" text="أضف متغيري NEXT_PUBLIC_PLATFORM_SUPABASE_URL وNEXT_PUBLIC_PLATFORM_SUPABASE_PUBLISHABLE_KEY إلى Vercel ثم أعد النشر." /></AuthFrame>;
   if (booting || (session && loading && !authorized)) return <AuthFrame><p className="text-stone-300"><RefreshCw className="ml-2 inline h-4 w-4 animate-spin" /> جارٍ التحقق من الحساب...</p></AuthFrame>;
-  if (!session) return <AuthFrame><section className="w-full max-w-md rounded-3xl border border-white/10 bg-[#14221b] p-6 shadow-2xl sm:p-8"><Brand /><p className="mb-5 text-sm leading-6 text-stone-400">لوحة مركزية لإدارة الاشتراكات. بيانات التشغيل تظل في قاعدة كل محل.</p><form onSubmit={submitAuth} className="space-y-4"><Field label="البريد الإلكتروني"><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field>{mode === "update" ? <Field label="كلمة المرور الجديدة"><Input type="password" minLength={8} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field> : (mode === "login" || mode === "signup") && <Field label="كلمة المرور"><Input type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === "login" ? "current-password" : "new-password"} className="border-white/10 bg-[#0e1914] text-stone-100" /></Field>}<Button disabled={loading} className="w-full bg-amber-200 text-[#14221b] hover:bg-amber-100">{loading ? "جارٍ التنفيذ..." : mode === "signup" ? "إنشاء حساب المالك" : mode === "forgot" ? "إرسال رابط الاستعادة" : mode === "update" ? "حفظ كلمة المرور" : "دخول آمن"}</Button></form>{authMessage && <p role="status" className="mt-4 rounded-xl border border-white/10 p-3 text-sm leading-6 text-stone-300">{authMessage}</p>}<div className="mt-5 flex flex-wrap justify-between gap-3 text-sm">{mode === "login" ? <><button onClick={() => { setMode("forgot"); setAuthMessage(""); }} className="text-amber-200">نسيت كلمة المرور؟</button><button onClick={() => { setMode("signup"); setAuthMessage(""); }} className="text-stone-400">أول مرة؟ أنشئ حساب المالك</button></> : <button onClick={() => { setMode("login"); setAuthMessage(""); }} className="text-amber-200">العودة للدخول</button>}</div></section></AuthFrame>;
+  if (!session) return <AuthFrame><section className="w-full max-w-md rounded-3xl border border-white/10 bg-[#14221b] p-6 shadow-2xl sm:p-8"><Brand /><p className="mb-5 text-sm leading-6 text-stone-400">لوحة مركزية لإدارة الاشتراكات. بيانات التشغيل تظل في قاعدة كل محل.</p><form onSubmit={submitAuth} className="space-y-4"><Field label="البريد الإلكتروني"><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field>{mode === "update" ? <Field label="كلمة المرور الجديدة"><Input type="password" minLength={8} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field> : mode !== "forgot" && <Field label="كلمة المرور"><Input type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field>}<Button disabled={loading} className="w-full bg-amber-200 text-[#14221b] hover:bg-amber-100">{loading ? "جارٍ التنفيذ..." : mode === "forgot" ? "إرسال رابط الاستعادة" : mode === "update" ? "حفظ كلمة المرور" : "دخول آمن"}</Button></form>{authMessage && <p role="status" className="mt-4 rounded-xl border border-white/10 p-3 text-sm leading-6 text-stone-300">{authMessage}</p>}<div className="mt-5 flex flex-wrap justify-between gap-3 text-sm">{mode === "login" ? <button onClick={() => { setMode("forgot"); setAuthMessage(""); }} className="text-amber-200">نسيت كلمة المرور؟</button> : <button onClick={() => { setMode("login"); setAuthMessage(""); }} className="text-amber-200">العودة للدخول</button>}</div></section></AuthFrame>;
   if (!authorized) return <AuthFrame><section className="max-w-lg rounded-3xl border border-rose-300/20 bg-[#14221b] p-7 text-center"><ShieldCheck className="mx-auto h-10 w-10 text-rose-300" /><h1 className="mt-4 text-xl font-bold">الحساب غير مخوّل</h1><p className="mt-2 text-sm text-stone-400">هذا الحساب لا يملك صلاحية مالك المنصة.</p><Button onClick={() => void db.auth.signOut()} className="mt-5 bg-white/10 text-white">تسجيل الخروج</Button></section></AuthFrame>;
+
+  if (mode === "update" && session) return <AuthFrame><section className="w-full max-w-md rounded-3xl border border-white/10 bg-[#14221b] p-6 shadow-2xl sm:p-8"><Brand /><h1 className="mb-4 text-lg font-bold">تعيين كلمة مرور جديدة</h1><p className="mb-5 text-sm text-stone-400">{session.user.email}</p><form onSubmit={submitAuth} className="space-y-4"><Field label="كلمة المرور الجديدة"><Input type="password" minLength={8} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" className="border-white/10 bg-[#0e1914] text-stone-100" /></Field><Button disabled={loading} className="w-full bg-amber-200 text-[#14221b]">{loading ? "جارٍ الحفظ..." : "حفظ كلمة المرور"}</Button></form>{authMessage && <p role="status" className="mt-4 rounded-xl border border-white/10 p-3 text-sm leading-6 text-stone-300">{authMessage}</p>}</section></AuthFrame>;
 
   const updateDraft = (patch: Partial<Shop>) => editing && setDraft({ ...editing, ...patch });
   const audit = async (action: string, shop: Shop, details: Record<string, unknown>) => { if (session.user.email) await db.from("platform_audit_log").insert({ actor_email: session.user.email, action, entity_type: "shop", entity_id: shop.id, details }); };
