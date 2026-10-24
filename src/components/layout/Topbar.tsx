@@ -9,6 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useCartStore } from "@/lib/store/useCartStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
+import { checkShopSubscription, type ShopSubscription } from "@/lib/shopSubscription";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ShopLogo } from "@/components/layout/ShopLogo";
@@ -25,12 +26,59 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
   const setBranch = useBranchStore((s) => s.setBranch);
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
+  const [subscription, setSubscription] = useState<ShopSubscription | null>(null);
 
   useEffect(() => {
     setNow(new Date());
     const id = setInterval(() => setNow(new Date()), 1000 * 30);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!currentBranchId) {
+      setSubscription(null);
+      return;
+    }
+
+    let mounted = true;
+    const refreshSubscription = () => {
+      void checkShopSubscription().then((current) => {
+        if (mounted) setSubscription(current);
+      });
+    };
+
+    refreshSubscription();
+    const interval = window.setInterval(refreshSubscription, 5 * 60 * 1000);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") refreshSubscription();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [currentBranchId]);
+
+  const subscriptionLabel = (() => {
+    if (!subscription) return null;
+    if (subscription.state === "suspended") return t.common.subscriptionSuspendedLabel;
+    if (subscription.state === "unlinked") return t.common.subscriptionUnlinkedLabel;
+    if (subscription.state === "unavailable") return t.common.subscriptionUnavailableLabel;
+    if (subscription.state === "expired") {
+      return subscription.daysRemaining !== null && subscription.daysRemaining < 0
+        ? t.common.subscriptionExpiredDaysAgo.replace("{days}", String(Math.abs(subscription.daysRemaining)))
+        : t.common.subscriptionExpiredLabel;
+    }
+    if (subscription.daysRemaining === null) return t.common.subscriptionNoExpiry;
+    if (subscription.daysRemaining === 0) return t.common.subscriptionExpiresToday;
+    return t.common.subscriptionDaysRemaining.replace("{days}", String(subscription.daysRemaining));
+  })();
+  const subscriptionTone = subscription?.state === "expired" || subscription?.state === "suspended" || subscription?.state === "unlinked"
+    ? "border-destructive/25 bg-destructive/10 text-destructive"
+    : subscription?.state === "unavailable" || (subscription?.daysRemaining !== null && subscription?.daysRemaining !== undefined && subscription.daysRemaining >= 0 && subscription.daysRemaining <= 7)
+      ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      : "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
 
   const handleLogout = () => {
     logout();
@@ -90,9 +138,15 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
         {currentBranch && (currentUser?.role === "owner" && branches.length > 1 ? (
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button type="button" title={t.common.quickSwitchBranch} className="hidden max-w-52 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-start text-sm transition-colors hover:bg-accent sm:flex">
+              <button type="button" title={`${t.common.quickSwitchBranch} · ${subscriptionLabel ?? ""}`} className="hidden max-w-72 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-start text-sm transition-colors hover:bg-accent sm:flex">
                 <Store className="h-4 w-4 shrink-0 text-primary" />
-                <span className="max-w-36 truncate font-medium">{bilingual(currentBranch.name, locale)}</span>
+                <span className="max-w-32 truncate font-medium">{bilingual(currentBranch.name, locale)}</span>
+                {subscriptionLabel && subscription?.state !== "checking" && (
+                  <span className={cn("inline-flex max-w-36 shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none", subscriptionTone)}>
+                    <Clock3 className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{subscriptionLabel}</span>
+                  </span>
+                )}
                 <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </button>
             </DropdownMenu.Trigger>
@@ -119,9 +173,15 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         ) : (
-          <div className="hidden items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm sm:flex">
+          <div title={subscriptionLabel ?? undefined} className="hidden max-w-72 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm sm:flex">
             <Store className="h-4 w-4 text-primary" />
-            <span className="max-w-36 truncate font-medium">{bilingual(currentBranch.name, locale)}</span>
+            <span className="max-w-32 truncate font-medium">{bilingual(currentBranch.name, locale)}</span>
+            {subscriptionLabel && subscription?.state !== "checking" && (
+              <span className={cn("inline-flex max-w-36 shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none", subscriptionTone)}>
+                <Clock3 className="h-3 w-3 shrink-0" />
+                <span className="truncate">{subscriptionLabel}</span>
+              </span>
+            )}
           </div>
         ))}
         <div className="flex items-center gap-0.5 rounded-xl border border-border/80 bg-background/60 p-0.5">
