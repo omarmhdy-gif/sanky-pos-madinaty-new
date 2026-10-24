@@ -28,6 +28,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DesktopPrinterDialog } from "@/components/pos/DesktopPrinterDialog";
 import { useTableStore } from "@/lib/store/useTableStore";
 import { getDiningPosition, getDiningSectionLabel, getDiningTableLabel } from "@/lib/tables";
+import { checkShopSubscription, type ShopSubscription } from "@/lib/shopSubscription";
 
 export default function PosPage() {
   const { t, locale } = useI18n();
@@ -82,10 +83,23 @@ export default function PosPage() {
   const [printerSetupOpen, setPrinterSetupOpen] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [activeDiningSectionId, setActiveDiningSectionId] = useState("");
+  const [subscription, setSubscription] = useState<ShopSubscription>({ state: "checking", canSell: true, expiresAt: null, daysRemaining: null });
+
+  const refreshSubscription = useCallback(async (force = false) => {
+    const latest = await checkShopSubscription(force);
+    setSubscription(latest);
+    return latest;
+  }, []);
 
   useEffect(() => {
     setDesktopMode(Boolean(window.sankyDesktop?.isDesktop));
   }, []);
+
+  useEffect(() => {
+    void refreshSubscription();
+    const timer = window.setInterval(() => { void refreshSubscription(true); }, 5 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [refreshSubscription]);
 
   useEffect(() => {
     if (!cartTableId) return;
@@ -166,7 +180,19 @@ export default function PosPage() {
   );
   useBarcodeScanner(handleScan, true);
 
-  const handleCharge = () => {
+  const handleCharge = async () => {
+    const currentSubscription = await refreshSubscription(true);
+    if (!currentSubscription.canSell) {
+      const message = currentSubscription.state === "expired"
+        ? t.pos.subscriptionExpired
+        : currentSubscription.state === "suspended"
+          ? t.pos.subscriptionSuspended
+          : currentSubscription.state === "unlinked"
+            ? t.pos.subscriptionUnlinked
+            : t.pos.subscriptionUnavailable;
+      toast(message, "error");
+      return;
+    }
     if (needsShift) {
       setStartShiftRequired(true);
       setStartShiftOpen(true);
@@ -184,6 +210,17 @@ export default function PosPage() {
   return (
     <AppShell title={t.pos.title}>
       <StartupValidation />
+      {(subscription.state === "expired" || subscription.state === "suspended" || subscription.state === "unlinked" || subscription.state === "unavailable") && (
+        <div role="alert" className="mx-3 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+          {subscription.state === "expired"
+            ? t.pos.subscriptionExpired
+            : subscription.state === "suspended"
+              ? t.pos.subscriptionSuspended
+              : subscription.state === "unlinked"
+                ? t.pos.subscriptionUnlinked
+                : t.pos.subscriptionUnavailable}
+        </div>
+      )}
       {desktopMode && <DesktopPrinterDialog open={printerSetupOpen} onOpenChange={setPrinterSetupOpen} />}
       <div className="flex h-full min-h-0">
         {/* Product browsing area */}
@@ -272,7 +309,12 @@ export default function PosPage() {
       )}
 
       <ModifierDialog product={modifierProduct} open={modifierOpen} onOpenChange={setModifierOpen} />
-      <PaymentDialog open={paymentOpen} onOpenChange={setPaymentOpen} onOrderComplete={() => setSearch("")} />
+      <PaymentDialog
+        open={paymentOpen}
+        onOpenChange={setPaymentOpen}
+        onOrderComplete={() => setSearch("")}
+        checkSaleAccess={async () => (await refreshSubscription(true)).canSell}
+      />
       <HeldOrdersDialog open={heldOpen} onOpenChange={setHeldOpen} />
       <InventoryQualityCheckDialog open={inventoryCheckOpen} onOpenChange={setInventoryCheckOpen} />
       <Dialog open={tablePickerOpen} onOpenChange={setTablePickerOpen}>

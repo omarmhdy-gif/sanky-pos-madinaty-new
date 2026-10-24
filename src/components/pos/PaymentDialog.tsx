@@ -5,6 +5,7 @@ import { Banknote, CreditCard, CheckCircle2, Printer, Plus, Split, CloudOff, Tra
 import { externalPaymentMethods, getExternalPaymentIcon } from "@/lib/externalPayment";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PaymentBrandMark } from "@/components/shared/PaymentBrandMark";
 import { useCartStore, lineTotal, computeDiscountAmount } from "@/lib/store/useCartStore";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
@@ -38,10 +39,12 @@ export function PaymentDialog({
   open,
   onOpenChange,
   onOrderComplete,
+  checkSaleAccess,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onOrderComplete?: () => void;
+  checkSaleAccess?: () => Promise<boolean>;
 }) {
   const { t, locale } = useI18n();
   const cart = useCartStore();
@@ -316,6 +319,10 @@ export function PaymentDialog({
     wasteReasonText?: string,
     externalMethod?: ExternalPaymentMethod
   ) => {
+    if (checkSaleAccess && !(await checkSaleAccess())) {
+      toast(t.pos.subscriptionBlocked, "error");
+      return;
+    }
     if (cart.promoCode && (!cart.customerId || selectedCustomer?.id !== cart.customerId)) {
       setCheckoutStep("customer");
       setCustomerError(locale === "ar" ? "لا يمكن استخدام البرومو كود بدون العميل المسجل المرتبط به." : "A promo code requires its registered customer.");
@@ -613,6 +620,7 @@ export function PaymentDialog({
               <div className="grid grid-cols-3 gap-2.5">
                 <PaymentMethodButton
                   icon={Banknote}
+                  brand="cash"
                   label={t.pos.cash}
                   disabled={submitting}
                   onClick={() => {
@@ -629,6 +637,7 @@ export function PaymentDialog({
                 />
                 <PaymentMethodButton
                   icon={CreditCard}
+                  brand="visa"
                   label={t.pos.card}
                   disabled={submitting}
                   onClick={() => finalizeOrder("card")}
@@ -640,13 +649,15 @@ export function PaymentDialog({
                 />
                 {externalMethods.map((externalMethod) => {
                   const ExternalIcon = getExternalPaymentIcon(externalMethod.icon);
+                  const externalLabel = bilingual(externalMethod.name, locale);
+                  const isInstaPay = /insta\s*pay/i.test(externalLabel) || externalLabel.includes("انستا");
                   return (
                     <PaymentMethodButton
                       key={externalMethod.id}
                       icon={ExternalIcon}
-                      label={bilingual(externalMethod.name, locale)}
+                      brand={isInstaPay ? "instapay" : undefined}
+                      label={externalLabel}
                       disabled={submitting}
-                      iconClassName="text-[#FF5A00]"
                       onClick={() => finalizeOrder("talabat", undefined, undefined, undefined, externalMethod)}
                     />
                   );
@@ -805,6 +816,7 @@ function PaymentMethodButton({
   onLongPress,
   disabled,
   iconClassName,
+  brand,
 }: {
   icon: typeof Banknote;
   label: string;
@@ -815,6 +827,7 @@ function PaymentMethodButton({
   onLongPress?: () => void;
   disabled?: boolean;
   iconClassName?: string;
+  brand?: "cash" | "visa" | "instapay";
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFiredRef = useRef(false);
@@ -854,9 +867,38 @@ function PaymentMethodButton({
       onPointerLeave={cancelPress}
       onPointerCancel={cancelPress}
       disabled={disabled}
-      className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-primary hover:shadow-md active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+      className={cn(
+        "flex flex-col items-center gap-2 rounded-xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-md active:scale-95 disabled:pointer-events-none disabled:opacity-50",
+        brand === "cash"
+          ? "border-emerald-200/80 hover:border-emerald-400 dark:border-emerald-900/70 dark:hover:border-emerald-700"
+          : brand === "instapay"
+            ? "border-orange-200/80 hover:border-orange-400 dark:border-orange-900/70 dark:hover:border-orange-700"
+            : brand === "visa"
+              ? "border-blue-200/80 hover:border-blue-400 dark:border-blue-900/70 dark:hover:border-blue-700"
+            : "border-border hover:border-primary"
+      )}
     >
-      <Icon className={cn("h-6 w-6", iconClassName ?? "text-primary")} />
+      <span
+        className={cn(
+          "flex h-11 w-11 items-center justify-center rounded-2xl border",
+          brand === "cash"
+            ? "border-emerald-200/80 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300"
+            : brand === "instapay"
+              ? "border-orange-200/80 bg-orange-50/70 text-orange-700 dark:border-orange-900/70 dark:bg-orange-950/30 dark:text-orange-300"
+              : brand === "visa"
+                ? "border-blue-200/80 bg-blue-50/70 text-blue-700 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-300"
+              : "border-primary/15 bg-primary/5 text-primary"
+        )}
+      >
+        {brand ? (
+          <PaymentBrandMark
+            brand={brand}
+            className={brand === "instapay" ? "h-5 w-10" : brand === "visa" ? "h-6 w-10" : "h-7 w-8"}
+          />
+        ) : (
+          <Icon className={cn("h-6 w-6", iconClassName ?? "text-primary")} />
+        )}
+      </span>
       <span className="text-xs font-semibold">{label}</span>
     </button>
   );
