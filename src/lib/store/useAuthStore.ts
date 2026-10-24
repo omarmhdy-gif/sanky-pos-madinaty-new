@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { getSafeStorage } from "@/lib/store/storage";
+import { supabase } from "@/lib/supabase/client";
 import type { StaffUser } from "@/lib/types";
 
 interface AuthStore {
@@ -21,7 +22,10 @@ export const useAuthStore = create<AuthStore>()(
       currentUser: null,
       isAuthenticated: false,
       login: (user) => set({ currentUser: user, isAuthenticated: true }),
-      logout: () => set({ currentUser: null, isAuthenticated: false }),
+      logout: () => {
+        void supabase.auth.signOut();
+        set({ currentUser: null, isAuthenticated: false });
+      },
     }),
     {
       name: "sanky-pos-auth",

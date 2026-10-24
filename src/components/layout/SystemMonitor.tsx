@@ -7,6 +7,8 @@ import { useSystemLogStore } from "@/lib/store/useSystemLogStore";
 import { usePrintQueueStore } from "@/lib/store/usePrintQueueStore";
 import { useOrderQueueStore } from "@/lib/store/useOrderQueueStore";
 import { useDataStore } from "@/lib/store/useDataStore";
+import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import {
   checkHealthLatency,
   testPrinterConnection,
@@ -105,11 +107,15 @@ export function SystemMonitor() {
   useEffect(() => {
     const runCheck = async () => {
       if (runningRef.current) return; // don't overlap if one check runs long
+      const desktop = window.sankyDesktop?.isDesktop ? window.sankyDesktop : undefined;
+      if (!desktop) {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session || !useAuthStore.getState().isAuthenticated) return;
+      }
       runningRef.current = true;
       const statusStore = useSystemStatusStore.getState();
       const prev = useSystemStatusStore.getState();
       const device = useDeviceSettingsStore.getState();
-      const desktop = window.sankyDesktop?.isDesktop ? window.sankyDesktop : undefined;
 
       // Internet: navigator.onLine is a fast, real (if imperfect) signal
       // straight from the OS network stack.

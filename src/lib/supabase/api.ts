@@ -707,6 +707,26 @@ export async function authenticateStaffPin(pin: string, branchId: string): Promi
   return (data as StaffUser | null) ?? null;
 }
 
+/** Resolves the signed-in shop owner after Supabase Auth verifies email/password. */
+export async function authenticateShopOwner(accountNumber: string): Promise<StaffUser | null> {
+  const { data, error } = await supabase.rpc("authenticate_shop_owner", {
+    p_account_number: accountNumber.trim(),
+  });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? fromStaffPublicRow(row) : null;
+}
+
+/** Checks the supplied email/account pair without exposing whether either exists. */
+export async function verifyShopAccount(accountNumber: string, email: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc("verify_shop_account", {
+    p_account_number: accountNumber.trim(),
+    p_email: email.trim().toLowerCase(),
+  });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
+
 // ---- settings -------------------------------------------------------------
 
 export async function updateSettings(branchId: string, patch: Partial<ShopSettings>): Promise<ShopSettings> {
