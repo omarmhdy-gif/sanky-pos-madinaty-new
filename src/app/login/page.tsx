@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Delete, Moon, Sun, Languages } from "lucide-react";
+import { Delete, Moon, Sun, Languages, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { authenticateShopOwner, authenticateStaffPin, verifyShopAccount } from "@/lib/supabase/api";
@@ -35,6 +35,7 @@ export default function LoginPage() {
   const [accountNumber, setAccountNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const loginAttemptInFlight = useRef(false);
 
@@ -193,7 +194,7 @@ export default function LoginPage() {
             <form onSubmit={handleWebSubmit} className="space-y-3">
               <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "رقم الحساب" : "Account number"}</span><input className={fieldClass} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" maxLength={4} pattern="\d{4}" placeholder="0000" required /></label>
               <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "البريد الإلكتروني" : "Email"}</span><input className={fieldClass} value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="name@example.com" required /></label>
-              {webMode !== "forgot" && <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "كلمة المرور" : "Password"}</span><input className={fieldClass} value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete={webMode === "setup" ? "new-password" : "current-password"} minLength={8} placeholder="••••••••" required /></label>}
+              {webMode !== "forgot" && <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "كلمة المرور" : "Password"}</span><div className="relative"><input className={fieldClass} style={{ paddingInlineEnd: "3.25rem" }} value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete={webMode === "setup" ? "new-password" : "current-password"} minLength={8} placeholder="••••••••" required /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? (ar ? "إخفاء كلمة المرور" : "Hide password") : (ar ? "إظهار كلمة المرور" : "Show password")} title={showPassword ? (ar ? "إخفاء كلمة المرور" : "Hide password") : (ar ? "إظهار كلمة المرور" : "Show password")} className="absolute inset-y-1 end-1 inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div></label>}
               {webMode === "login" && <div className="text-end"><button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => { setMessage(""); setWebMode("forgot"); }}>{ar ? "نسيت كلمة المرور؟" : "Forgot password?"}</button></div>}
               {message && <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300" role="status">{message}</p>}
               <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifying}>{verifying ? (ar ? "جارٍ التحقق..." : "Please wait...") : webMode === "forgot" ? (ar ? "إرسال رابط الاستعادة" : "Send reset link") : webMode === "setup" ? (ar ? "إنشاء كلمة المرور" : "Set up password") : (ar ? "دخول" : "Sign in")}</Button>
