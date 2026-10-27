@@ -1,9 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import { getShopAccountNumber, supabase } from "@/lib/supabase/client";
 
 const CACHE_KEY = "sanky.shop.subscription";
 const CACHE_MAX_AGE_MS = 30_000;
 const platformUrl = process.env.NEXT_PUBLIC_PLATFORM_SUPABASE_URL;
 const platformPublishableKey = process.env.NEXT_PUBLIC_PLATFORM_SUPABASE_PUBLISHABLE_KEY;
+const licenseClient = platformUrl && platformPublishableKey
+  ? createClient(platformUrl, platformPublishableKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    })
+  : null;
 
 function tenantProjectRef() {
   const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -12,6 +18,7 @@ function tenantProjectRef() {
 
 type SubscriptionSnapshot = {
   tenantProjectRef: string;
+  accountNumber: string;
   status: "active" | "trial" | "suspended" | "expired" | "unlinked";
   expiresAt: string | null;
   checkedAt: number;
@@ -39,12 +46,12 @@ function toSubscription(snapshot: SubscriptionSnapshot): ShopSubscription {
   return { state: "allowed", canSell: true, expiresAt: snapshot.expiresAt, daysRemaining };
 }
 
-function readSnapshot(tenantProjectRef: string): SubscriptionSnapshot | null {
+function readSnapshot(tenantProjectRef: string, accountNumber: string): SubscriptionSnapshot | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw) as SubscriptionSnapshot;
-    return value.tenantProjectRef === tenantProjectRef ? value : null;
+    return value.tenantProjectRef === tenantProjectRef && value.accountNumber === accountNumber ? value : null;
   } catch {
     return null;
   }
@@ -55,34 +62,40 @@ export async function checkShopSubscription(force = false): Promise<ShopSubscrip
 
   const projectRef = tenantProjectRef();
   if (!projectRef) return { state: "unavailable", canSell: true, expiresAt: null, daysRemaining: null };
+  const accountNumber = getShopAccountNumber() ?? "0000";
 
-  if (!platformUrl || !platformPublishableKey) {
-    const cached = readSnapshot(projectRef);
+  if (!licenseClient) {
+    const cached = readSnapshot(projectRef, accountNumber);
     return cached ? toSubscription(cached) : { state: "unavailable", canSell: true, expiresAt: null, daysRemaining: null };
   }
 
-  const cached = readSnapshot(projectRef);
+  const cached = readSnapshot(projectRef, accountNumber);
   if (!force && cached && Date.now() - cached.checkedAt < CACHE_MAX_AGE_MS) return toSubscription(cached);
 
   try {
-    const licenseClient = createClient(platformUrl, platformPublishableKey, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      global: { headers: { "x-tenant-project-ref": projectRef } },
+    const { data: sessionData } = await supabase.auth.getSession();
+    const headers = {
+      // Supabase Functions otherwise falls back to the central project's
+      // public API key as Authorization. Send an explicit marker so the
+      // license function can distinguish the legacy cashier from a POS JWT.
+      Authorization: sessionData.session?.access_token
+        ? `Bearer ${sessionData.session.access_token}`
+        : "Bearer legacy-desktop",
+    };
+    const { data, error } = await licenseClient.functions.invoke("shop-license-status", {
+      body: { accountNumber },
+      headers,
     });
-    const { data, error } = await licenseClient
-      .from("platform_shops")
-      .select("status,expires_at")
-      .eq("tenant_project_ref", projectRef)
-      .maybeSingle();
     if (error) throw error;
-    const result = data as { status?: string; expires_at?: string | null } | null;
+    const result = data as { status?: string; expiresAt?: string | null } | null;
     const status: SubscriptionSnapshot["status"] = result?.status === "active" || result?.status === "trial" || result?.status === "suspended"
       ? result.status
       : "unlinked";
     const snapshot: SubscriptionSnapshot = {
       tenantProjectRef: projectRef,
+      accountNumber,
       status,
-      expiresAt: result?.expires_at ?? null,
+      expiresAt: result?.expiresAt ?? null,
       checkedAt: Date.now(),
     };
     try { localStorage.setItem(CACHE_KEY, JSON.stringify(snapshot)); } catch { /* Keep the online response usable. */ }

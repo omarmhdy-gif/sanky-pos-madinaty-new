@@ -6,7 +6,7 @@ import { Delete, Moon, Sun, Languages, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { authenticateShopOwner, authenticateStaffPin, verifyShopAccount } from "@/lib/supabase/api";
-import { supabase } from "@/lib/supabase/client";
+import { clearShopAccountNumber, getShopAccountNumber, setShopAccountNumber, supabase } from "@/lib/supabase/client";
 import { canAccess, defaultRouteFor } from "@/lib/permissions";
 import { RETURN_PATH_KEY } from "@/components/auth/AuthGuard";
 import { useI18n } from "@/lib/i18n";
@@ -15,13 +15,27 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
-type WebMode = "login" | "forgot" | "setup";
+type WebMode = "login" | "forgot";
+
+const DEVICE_ID_STORAGE_KEY = "sanky-pos-device-uuid";
+function getDeviceUuid() {
+  try {
+    const existing = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (existing && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(existing)) return existing;
+    const generated = window.crypto.randomUUID();
+    window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    return window.crypto.randomUUID();
+  }
+}
 
 export default function LoginPage() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const setBranch = useBranchStore((s) => s.setBranch);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
+  const fetchBranches = useBranchStore((s) => s.fetchBranches);
   const { t, locale, setLocale } = useI18n();
   const { theme, toggleTheme } = useTheme();
 
@@ -30,9 +44,11 @@ export default function LoginPage() {
   const [verifying, setVerifying] = useState(false);
   const [welcomeName, setWelcomeName] = useState("");
   const [desktopMode, setDesktopMode] = useState(false);
+  const [desktopActivated, setDesktopActivated] = useState(false);
   const [modeResolved, setModeResolved] = useState(false);
   const [webMode, setWebMode] = useState<WebMode>("login");
   const [accountNumber, setAccountNumber] = useState("");
+  const [activationCode, setActivationCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -43,9 +59,84 @@ export default function LoginPage() {
   const fieldClass = "h-12 w-full rounded-xl border border-border bg-background px-4 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15";
 
   useEffect(() => {
-    setDesktopMode(Boolean(window.sankyDesktop?.isDesktop));
-    setModeResolved(true);
+    const isDesktop = Boolean(window.sankyDesktop?.isDesktop);
+    setDesktopMode(isDesktop);
+    let active = true;
+    if (!isDesktop) {
+      setModeResolved(true);
+      return () => { active = false; };
+    }
+    const validateDesktopSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
+      if (!session) {
+        if (active) setDesktopActivated(false);
+        return;
+      }
+      const storedAccount = getShopAccountNumber();
+      if (!storedAccount) {
+        if (active) setDesktopActivated(false);
+        await supabase.auth.signOut();
+        return;
+      }
+      const { data, error } = await supabase.rpc("verify_shop_device_session", { p_account_number: storedAccount });
+      if (!active) return;
+      const valid = !error && data === true;
+      setDesktopActivated(valid);
+      if (!valid) {
+        clearShopAccountNumber();
+        await supabase.auth.signOut();
+      }
+    };
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (active) void validateDesktopSession(session);
+    });
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      void validateDesktopSession(data.session).finally(() => { if (active) setModeResolved(true); });
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
+
+  const activateDesktop = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (verifying) return;
+    setVerifying(true);
+    try {
+      const cleanAccount = accountNumber.trim();
+      const cleanCode = activationCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (!/^\d{4}$/.test(cleanAccount)) throw new Error(ar ? "أدخل رقم الحساب المكوّن من 4 أرقام" : "Enter the 4-digit account number");
+      if (!/^[A-Z2-9]{16}$/.test(cleanCode)) throw new Error(ar ? "كود التفعيل غير صحيح" : "The activation code is invalid");
+
+      const { data, error } = await supabase.functions.invoke("platform-device-activate", {
+        body: { accountNumber: cleanAccount, code: cleanCode, deviceUuid: getDeviceUuid() },
+      });
+      if (error) throw error;
+      const result = data as { branchId?: string; accessToken?: string; refreshToken?: string } | null;
+      if (!result?.branchId || !result.accessToken || !result.refreshToken) {
+        throw new Error(ar ? "تعذر إكمال التفعيل. أنشئ كودًا جديدًا من لوحة التحكم." : "Activation could not be completed. Create a new code in the console.");
+      }
+
+      setShopAccountNumber(cleanAccount);
+      setBranch(result.branchId);
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: result.accessToken,
+        refresh_token: result.refreshToken,
+      });
+      if (sessionError) throw sessionError;
+      const { data: deviceSessionValid, error: deviceSessionError } = await supabase.rpc("verify_shop_device_session", { p_account_number: cleanAccount });
+      if (deviceSessionError || deviceSessionValid !== true) {
+        await supabase.auth.signOut();
+        clearShopAccountNumber();
+        throw new Error(ar ? "تم إصدار الجلسة لكن لم يكتمل ربط الجهاز بالفرع." : "The sign-in was created, but device-to-branch binding failed.");
+      }
+      setDesktopActivated(true);
+      setActivationCode("");
+      toast(ar ? "تم ربط الجهاز. جارٍ تحميل بيانات الفرع لأول مرة." : "Device connected. Loading this branch for the first time.", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : (ar ? "تعذر تفعيل الجهاز" : "Unable to activate this device"), "error");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const handleDigit = (d: string) => {
     if (loginAttemptInFlight.current || welcomeName) return;
@@ -91,22 +182,9 @@ export default function LoginPage() {
       if (!/^\d{4}$/.test(accountNumber)) {
         throw new Error(ar ? "رقم الحساب لازم يكون 4 أرقام" : "Account number must be 4 digits");
       }
-      if (webMode === "setup" || webMode === "forgot") {
+      if (webMode === "forgot") {
         const matches = await verifyShopAccount(accountNumber, cleanEmail);
         if (!matches) throw new Error(ar ? "بيانات الحساب غير صحيحة" : "Account details are incorrect");
-      }
-
-      if (webMode === "setup") {
-        const { error } = await supabase.auth.signUp({
-          email: cleanEmail,
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/login/` },
-        });
-        if (error) throw error;
-        setMessage(ar ? "أرسلنا رابط تأكيد إلى بريدك. افتحه ثم سجّل الدخول." : "A confirmation link was sent to your email. Open it, then sign in.");
-        setWebMode("login");
-        setPassword("");
-        return;
       }
 
       if (webMode === "forgot") {
@@ -123,10 +201,13 @@ export default function LoginPage() {
       const user = await authenticateShopOwner(accountNumber);
       if (!user || !user.isActive || user.role !== "owner") {
         await supabase.auth.signOut();
+        clearShopAccountNumber();
         throw new Error(ar ? "رقم الحساب أو البريد غير مرتبط بحساب مالك نشط" : "This email is not linked to an active owner for that account");
       }
+      setShopAccountNumber(accountNumber);
       setBranch(user.branchId);
       login(user);
+      await fetchBranches();
       setWelcomeName(user.name);
       let returnPath: string | null = null;
       try {
@@ -170,13 +251,22 @@ export default function LoginPage() {
               </div>
             ) : (
               <div className="mt-5 text-center">
-                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{desktopMode ? t.login.title : (ar ? "تسجيل دخول صاحب الحساب" : "Shop owner sign in")}</h1>
-                <p className="mt-1 text-sm text-muted-foreground">{desktopMode ? t.login.subtitle : (ar ? "أدخل رقم الحساب والبريد وكلمة المرور" : "Enter your account number, email, and password")}</p>
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{desktopMode ? (desktopActivated ? t.login.title : (ar ? "تفعيل جهاز الكاشير" : "Activate cashier device")) : (ar ? "تسجيل دخول صاحب الحساب" : "Shop owner sign in")}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{desktopMode ? (desktopActivated ? t.login.subtitle : (ar ? "أدخل رقم المحل وكود التفعيل الذي أنشأه مالك المنصة" : "Enter the business number and the activation code from the platform console")) : (ar ? "أدخل رقم الحساب والبريد وكلمة المرور" : "Enter your account number, email, and password")}</p>
               </div>
             )}
           </div>
 
-          {!welcomeName && desktopMode && (
+          {!welcomeName && desktopMode && !desktopActivated && (
+            <form onSubmit={activateDesktop} className="space-y-4">
+              <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "رقم الحساب" : "Business number"}</span><input className={fieldClass + " text-center font-mono tracking-[0.35em]"} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" maxLength={4} pattern="\d{4}" placeholder="0000" required /></label>
+              <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "كود تفعيل الجهاز" : "Device activation code"}</span><input className={fieldClass + " text-center font-mono uppercase tracking-[0.16em]"} value={activationCode} onChange={(e) => setActivationCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 19))} autoComplete="off" maxLength={19} placeholder="XXXX-XXXX-XXXX-XXXX" required /></label>
+              <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifying}>{verifying ? (ar ? "جارٍ التفعيل والمزامنة..." : "Activating and syncing...") : (ar ? "تفعيل ومزامنة أولى" : "Activate and initial sync")}</Button>
+              <p className="text-center text-xs leading-5 text-muted-foreground">{ar ? "يُستخدم الكود مرة واحدة فقط. بعد اكتمال المزامنة، الدخول اليومي يكون برقم PIN الموظف." : "This code is used once. After the initial sync, daily cashier access uses the employee PIN."}</p>
+            </form>
+          )}
+
+          {!welcomeName && desktopMode && desktopActivated && (
             <div className={cn("flex flex-col items-center gap-4", shake && "animate-shake")}>
               <div className="flex gap-3" aria-label={`${pin.length} of 4 digits entered`}>
                 {[0, 1, 2, 3].map((i) => <div key={i} className={cn("h-3.5 w-3.5 rounded-full border-2 transition-all", pin.length > i ? "scale-110 border-amber-700 bg-amber-700 dark:border-amber-300 dark:bg-amber-300" : "border-stone-300 dark:border-stone-600")} />)}
@@ -194,12 +284,12 @@ export default function LoginPage() {
             <form onSubmit={handleWebSubmit} className="space-y-3">
               <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "رقم الحساب" : "Account number"}</span><input className={fieldClass} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" maxLength={4} pattern="\d{4}" placeholder="0000" required /></label>
               <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "البريد الإلكتروني" : "Email"}</span><input className={fieldClass} value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder="name@example.com" required /></label>
-              {webMode !== "forgot" && <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "كلمة المرور" : "Password"}</span><div className="relative"><input className={fieldClass} style={{ paddingInlineEnd: "3.25rem" }} value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete={webMode === "setup" ? "new-password" : "current-password"} minLength={8} placeholder="••••••••" required /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? (ar ? "إخفاء كلمة المرور" : "Hide password") : (ar ? "إظهار كلمة المرور" : "Show password")} title={showPassword ? (ar ? "إخفاء كلمة المرور" : "Hide password") : (ar ? "إظهار كلمة المرور" : "Show password")} className="absolute inset-y-1 end-1 inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div></label>}
+              {webMode !== "forgot" && <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "كلمة المرور" : "Password"}</span><div className="relative"><input className={fieldClass} style={{ paddingInlineEnd: "3.25rem" }} value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete="current-password" minLength={8} placeholder="••••••••" required /><button type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? (ar ? "إخفاء كلمة المرور" : "Hide password") : (ar ? "إظهار كلمة المرور" : "Show password")} title={showPassword ? (ar ? "إخفاء كلمة المرور" : "Hide password") : (ar ? "إظهار كلمة المرور" : "Show password")} className="absolute inset-y-1 end-1 inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50">{showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}</button></div></label>}
               {webMode === "login" && <div className="text-end"><button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => { setMessage(""); setWebMode("forgot"); }}>{ar ? "نسيت كلمة المرور؟" : "Forgot password?"}</button></div>}
               {message && <p className="rounded-xl bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300" role="status">{message}</p>}
-              <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifying}>{verifying ? (ar ? "جارٍ التحقق..." : "Please wait...") : webMode === "forgot" ? (ar ? "إرسال رابط الاستعادة" : "Send reset link") : webMode === "setup" ? (ar ? "إنشاء كلمة المرور" : "Set up password") : (ar ? "دخول" : "Sign in")}</Button>
+              <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifying}>{verifying ? (ar ? "جارٍ التحقق..." : "Please wait...") : webMode === "forgot" ? (ar ? "إرسال رابط الاستعادة" : "Send reset link") : (ar ? "دخول" : "Sign in")}</Button>
               <div className="flex justify-center gap-2 pt-1 text-sm text-muted-foreground">
-                {webMode === "login" ? <button type="button" className="text-primary hover:underline" onClick={() => { setMessage(""); setWebMode("setup"); }}>{ar ? "أول مرة؟ عيّن كلمة المرور" : "First time? Set your password"}</button> : <button type="button" className="text-primary hover:underline" onClick={() => { setMessage(""); setWebMode("login"); }}>{ar ? "العودة لتسجيل الدخول" : "Back to sign in"}</button>}
+                {webMode === "forgot" && <button type="button" className="text-primary hover:underline" onClick={() => { setMessage(""); setWebMode("login"); }}>{ar ? "العودة لتسجيل الدخول" : "Back to sign in"}</button>}
               </div>
             </form>
           )}

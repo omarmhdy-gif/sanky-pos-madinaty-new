@@ -3,8 +3,7 @@ import "./globals.css";
 import { I18nProvider } from "@/lib/i18n";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { Toaster } from "@/components/ui/toast";
-import { DataBootstrap } from "@/components/layout/DataBootstrap";
-import { SystemMonitor } from "@/components/layout/SystemMonitor";
+import { AppRuntime } from "@/components/layout/AppRuntime";
 
 export const metadata: Metadata = {
   title: "Sanky POS — Coffee Shop Point of Sale",
@@ -29,8 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="font-sans" suppressHydrationWarning>
         <ThemeProvider>
           <I18nProvider>
-            <SystemMonitor />
-            <DataBootstrap>{children}</DataBootstrap>
+            <AppRuntime>{children}</AppRuntime>
             <Toaster />
           </I18nProvider>
         </ThemeProvider>

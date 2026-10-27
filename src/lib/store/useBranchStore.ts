@@ -29,7 +29,7 @@ interface BranchStore {
 
 export const useBranchStore = create<BranchStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       branches: [],
       currentBranchId: "branch_madinaty",
       loading: false,
@@ -45,17 +45,23 @@ export const useBranchStore = create<BranchStore>()(
             10000
           );
 
-          // This deployment is for Madinaty Branch.
-          // Always use the branch that exists in the new database.
+          // Keep the selected branch when it remains visible to the current
+          // signed-in owner; otherwise choose the first branch RLS returned.
           const madinatyExists = branches.some(
             (branch) => branch.id === "branch_madinaty"
+          );
+          const currentBranchId = get().currentBranchId;
+          const currentBranchIsVisible = branches.some(
+            (branch) => branch.id === currentBranchId
           );
 
           set({
             branches,
-            currentBranchId: madinatyExists
-              ? "branch_madinaty"
-              : branches[0]?.id ?? null,
+            currentBranchId: currentBranchIsVisible
+              ? currentBranchId
+              : madinatyExists
+                ? "branch_madinaty"
+                : branches[0]?.id ?? null,
             loading: false,
             loaded: true,
             error: null,

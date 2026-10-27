@@ -5,7 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
-import { supabase } from "@/lib/supabase/client";
+import { clearShopAccountNumber, getShopAccountNumber, supabase } from "@/lib/supabase/client";
 import { BrandSplash } from "@/components/layout/BrandSplash";
 
 // Loads branches on mount (needed even before login, for Branch Select), then
@@ -18,6 +18,9 @@ import { BrandSplash } from "@/components/layout/BrandSplash";
 export function DataBootstrap({ children }: { children: React.ReactNode }) {
   const [desktopMode, setDesktopMode] = useState<boolean | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [hasAuthSession, setHasAuthSession] = useState(false);
+  const [desktopSessionChecked, setDesktopSessionChecked] = useState(false);
+  const [desktopDeviceSessionValid, setDesktopDeviceSessionValid] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const logout = useAuthStore((s) => s.logout);
   const fetchBranches = useBranchStore((s) => s.fetchBranches);
@@ -27,18 +30,44 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
 
   const fetchAll = useDataStore((s) => s.fetchAll);
   const dataLoaded = useDataStore((s) => s.loaded);
-  const canLoadAppData = desktopMode === true || (authReady && isAuthenticated);
+  const canLoadAppData = desktopMode === true
+    ? authReady && desktopSessionChecked && desktopDeviceSessionValid
+    : authReady && hasAuthSession && isAuthenticated;
 
   useEffect(() => {
     const isDesktop = Boolean(window.sankyDesktop?.isDesktop);
     setDesktopMode(isDesktop);
-    if (isDesktop) {
-      setAuthReady(true);
-      return;
-    }
 
     let active = true;
+    const checkDeviceSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
+      setHasAuthSession(Boolean(session));
+      if (!isDesktop) return;
+      if (!session) {
+        if (active) {
+          setDesktopDeviceSessionValid(false);
+          setDesktopSessionChecked(true);
+        }
+        return;
+      }
+      const accountNumber = getShopAccountNumber();
+      const { data, error } = accountNumber
+        ? await supabase.rpc("verify_shop_device_session", { p_account_number: accountNumber })
+        : { data: false, error: null };
+      if (!active) return;
+      const valid = !error && data === true;
+      setDesktopDeviceSessionValid(valid);
+      setDesktopSessionChecked(true);
+      if (!valid) {
+        clearShopAccountNumber();
+        await supabase.auth.signOut();
+      }
+    };
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      void checkDeviceSession(session);
+      if (event === "SIGNED_OUT") {
+        clearShopAccountNumber();
+        logout();
+      }
       if (
         event === "PASSWORD_RECOVERY" &&
         session &&
@@ -59,7 +88,11 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
-      if (!data.session) logout();
+      void checkDeviceSession(data.session);
+      if (!data.session) {
+        clearShopAccountNumber();
+        logout();
+      }
       setAuthReady(true);
     });
     return () => {
@@ -68,9 +101,12 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
     };
   }, [logout]);
 
+  // Don't load branch lists before authentication. This also makes the first
+  // Electron launch land on the activation form instead of an anonymous sync.
   useEffect(() => {
-    fetchBranches();
-  }, [fetchBranches]);
+    if (desktopMode === true && canLoadAppData) void fetchBranches();
+    if (desktopMode === false && authReady && hasAuthSession) void fetchBranches();
+  }, [desktopMode, authReady, hasAuthSession, canLoadAppData, fetchBranches]);
 
   useEffect(() => {
     if (currentBranchId && canLoadAppData) {
@@ -96,7 +132,11 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const stillLoading = !branchesLoaded || desktopMode === null || (desktopMode === false && !authReady) || (canLoadAppData && currentBranchId !== null && !dataLoaded);
+  const stillLoading = desktopMode === null
+    || !authReady
+    || (desktopMode && hasAuthSession && !desktopSessionChecked)
+    || (canLoadAppData && !branchesLoaded)
+    || (canLoadAppData && currentBranchId !== null && !dataLoaded);
 
   if (stillLoading) {
     return <BrandSplash />;

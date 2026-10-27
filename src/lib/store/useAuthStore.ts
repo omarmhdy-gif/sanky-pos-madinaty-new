@@ -11,11 +11,9 @@ interface AuthStore {
   logout: () => void;
 }
 
-// Persisted deliberately: a refresh should keep the till logged in exactly
-// where it was (per explicit request) — only an actual Logout clears this
-// and returns to the user-selection screen. Holds only the same
-// non-secret StaffUser fields already sent to the client on every login
-// (id/branchId/name/role/avatarColor/isActive) — no PIN.
+// The staff identity is persisted across renderer refreshes. On Electron,
+// logging out a cashier keeps the separate device-auth session so the one-time
+// activation code is not requested again. Web logout still ends Supabase Auth.
 export const useAuthStore = create<AuthStore>()(
   persist(
     (set) => ({
@@ -23,7 +21,9 @@ export const useAuthStore = create<AuthStore>()(
       isAuthenticated: false,
       login: (user) => set({ currentUser: user, isAuthenticated: true }),
       logout: () => {
-        void supabase.auth.signOut();
+        if (typeof window === "undefined" || !window.sankyDesktop?.isDesktop) {
+          void supabase.auth.signOut();
+        }
         set({ currentUser: null, isAuthenticated: false });
       },
     }),
