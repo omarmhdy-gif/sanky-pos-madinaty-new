@@ -41,6 +41,7 @@ Deno.serve(async (request) => {
   const bearer = request.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
   let ownerEmail: string | null = null;
   let validDeviceSession = false;
+  let deviceIdentity: { uuid: string; name: string } | null = null;
 
   if (bearer && bearer !== "legacy-desktop") {
     const posUserClient = createClient(posUrl, posAnonKey, {
@@ -53,6 +54,14 @@ Deno.serve(async (request) => {
       p_account_number: accountNumber,
     });
     validDeviceSession = !deviceError && deviceValid === true;
+    if (validDeviceSession) {
+      const metadata = authData.user.user_metadata ?? {};
+      const uuid = typeof metadata.device_uuid === "string" ? metadata.device_uuid : "";
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)) {
+        const name = typeof metadata.device_name === "string" ? metadata.device_name.trim().slice(0, 80) : "";
+        deviceIdentity = { uuid, name: name || `Cashier ${uuid.slice(0, 8)}` };
+      }
+    }
     if (!validDeviceSession) {
       const { data: ownerRows, error: ownerError } = await posUserClient.rpc("authenticate_shop_owner", {
         p_account_number: accountNumber,
@@ -72,9 +81,10 @@ Deno.serve(async (request) => {
   });
   let query = centralService
     .from("platform_shops")
-    .select("status, expires_at")
+    .select("id, status, expires_at")
     .eq("account_number", accountNumber)
-    .eq("tenant_project_ref", expectedProjectRef);
+    .eq("tenant_project_ref", expectedProjectRef)
+    .is("archived_at", null);
   if (ownerEmail) query = query.eq("owner_email", ownerEmail);
   else if (!validDeviceSession && accountNumber !== "0000") return reply(401, { error: "Sign in to the business account before checking its subscription." });
   const { data, error } = await query.maybeSingle();
@@ -83,5 +93,15 @@ Deno.serve(async (request) => {
     return reply(503, { error: "Subscription lookup is temporarily unavailable." });
   }
   if (!data) return reply(404, { error: "Business subscription was not found." });
+
+  if (validDeviceSession && deviceIdentity) {
+    const { error: heartbeatError } = await centralService.from("platform_devices").upsert({
+      shop_id: data.id,
+      device_uuid: deviceIdentity.uuid,
+      device_name: deviceIdentity.name,
+      last_sync_at: new Date().toISOString(),
+    }, { onConflict: "shop_id,device_uuid" });
+    if (heartbeatError) console.error("Device sync heartbeat could not be saved.", heartbeatError.message);
+  }
   return reply(200, { status: data.status, expiresAt: data.expires_at });
 });

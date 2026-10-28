@@ -6,6 +6,7 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { clearShopAccountNumber, getShopAccountNumber, supabase } from "@/lib/supabase/client";
+import { checkShopSubscription } from "@/lib/shopSubscription";
 import { BrandSplash } from "@/components/layout/BrandSplash";
 
 // Loads branches on mount (needed even before login, for Branch Select), then
@@ -110,9 +111,11 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (currentBranchId && canLoadAppData) {
-      fetchAll();
+      void fetchAll().then((synced) => {
+        if (synced && desktopMode === true) void checkShopSubscription(true);
+      });
     }
-  }, [currentBranchId, canLoadAppData, fetchAll]);
+  }, [currentBranchId, canLoadAppData, desktopMode, fetchAll]);
 
   if (branchesError) {
     return (

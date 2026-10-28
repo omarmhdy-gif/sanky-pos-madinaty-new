@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 type WebMode = "login" | "forgot";
 
 const DEVICE_ID_STORAGE_KEY = "sanky-pos-device-uuid";
+const DEVICE_NAME_STORAGE_KEY = "sanky-pos-device-name";
 function getDeviceUuid() {
   try {
     const existing = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
@@ -49,6 +50,7 @@ export default function LoginPage() {
   const [webMode, setWebMode] = useState<WebMode>("login");
   const [accountNumber, setAccountNumber] = useState("");
   const [activationCode, setActivationCode] = useState("");
+  const [deviceName, setDeviceName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -103,11 +105,12 @@ export default function LoginPage() {
     try {
       const cleanAccount = accountNumber.trim();
       const cleanCode = activationCode.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const cleanDeviceName = deviceName.trim().slice(0, 80);
       if (!/^\d{4}$/.test(cleanAccount)) throw new Error(ar ? "أدخل رقم الحساب المكوّن من 4 أرقام" : "Enter the 4-digit account number");
       if (!/^[A-Z2-9]{16}$/.test(cleanCode)) throw new Error(ar ? "كود التفعيل غير صحيح" : "The activation code is invalid");
 
       const { data, error } = await supabase.functions.invoke("platform-device-activate", {
-        body: { accountNumber: cleanAccount, code: cleanCode, deviceUuid: getDeviceUuid() },
+        body: { accountNumber: cleanAccount, code: cleanCode, deviceUuid: getDeviceUuid(), deviceName: cleanDeviceName },
       });
       if (error) throw error;
       const result = data as { branchId?: string; accessToken?: string; refreshToken?: string } | null;
@@ -116,6 +119,7 @@ export default function LoginPage() {
       }
 
       setShopAccountNumber(cleanAccount);
+      if (cleanDeviceName) window.localStorage.setItem(DEVICE_NAME_STORAGE_KEY, cleanDeviceName);
       setBranch(result.branchId);
       const { error: sessionError } = await supabase.auth.setSession({
         access_token: result.accessToken,
@@ -260,6 +264,7 @@ export default function LoginPage() {
           {!welcomeName && desktopMode && !desktopActivated && (
             <form onSubmit={activateDesktop} className="space-y-4">
               <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "رقم الحساب" : "Business number"}</span><input className={fieldClass + " text-center font-mono tracking-[0.35em]"} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" autoComplete="off" maxLength={4} pattern="\d{4}" placeholder="0000" required /></label>
+              <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "اسم جهاز الكاشير" : "Cashier device name"}</span><input className={fieldClass} value={deviceName} onChange={(e) => setDeviceName(e.target.value.slice(0, 80))} autoComplete="off" maxLength={80} placeholder={ar ? "مثال: كاشير 1" : "For example: Cashier 1"} /></label>
               <label className="block space-y-1.5"><span className="text-sm font-medium">{ar ? "كود تفعيل الجهاز" : "Device activation code"}</span><input className={fieldClass + " text-center font-mono uppercase tracking-[0.16em]"} value={activationCode} onChange={(e) => setActivationCode(e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 19))} autoComplete="off" maxLength={19} placeholder="XXXX-XXXX-XXXX-XXXX" required /></label>
               <Button type="submit" className="h-12 w-full rounded-xl" disabled={verifying}>{verifying ? (ar ? "جارٍ التفعيل والمزامنة..." : "Activating and syncing...") : (ar ? "تفعيل ومزامنة أولى" : "Activate and initial sync")}</Button>
               <p className="text-center text-xs leading-5 text-muted-foreground">{ar ? "يُستخدم الكود مرة واحدة فقط. بعد اكتمال المزامنة، الدخول اليومي يكون برقم PIN الموظف." : "This code is used once. After the initial sync, daily cashier access uses the employee PIN."}</p>

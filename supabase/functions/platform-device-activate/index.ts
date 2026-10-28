@@ -29,11 +29,12 @@ Deno.serve(async (request) => {
   const posService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!posUrl || !posAnon || !posService) return reply(503, { error: "Device activation is not configured." });
 
-  let body: { accountNumber?: unknown; code?: unknown; deviceUuid?: unknown };
+  let body: { accountNumber?: unknown; code?: unknown; deviceUuid?: unknown; deviceName?: unknown };
   try { body = await request.json(); } catch { return reply(400, { error: "Invalid request." }); }
   const accountNumber = typeof body.accountNumber === "string" ? body.accountNumber.trim() : "";
   const code = typeof body.code === "string" ? body.code : "";
   const deviceUuid = typeof body.deviceUuid === "string" ? body.deviceUuid : "";
+  const deviceName = typeof body.deviceName === "string" ? body.deviceName.trim().slice(0, 80) : "";
   if (!/^\d{4}$/.test(accountNumber) ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(deviceUuid)) {
     return reply(400, { error: "رقم الحساب أو معرّف الجهاز غير صحيح." });
@@ -61,7 +62,12 @@ Deno.serve(async (request) => {
       email,
       password,
       email_confirm: true,
-      user_metadata: { account_number: accountNumber, device_uuid: deviceUuid, role: "cashier_device" },
+      user_metadata: {
+        account_number: accountNumber,
+        device_uuid: deviceUuid,
+        device_name: deviceName || `Cashier ${deviceUuid.slice(0, 8)}`,
+        role: "cashier_device",
+      },
     });
     if (createError || !created.user) throw createError ?? new Error("Could not create device identity.");
     authUserId = created.user.id;
