@@ -21,6 +21,7 @@ import {
 
 import { AppShell } from "@/components/layout/AppShell";
 import { DateFilterBar } from "@/components/shared/DateFilterBar";
+import { PaymentBrandMark } from "@/components/shared/PaymentBrandMark";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n, bilingual } from "@/lib/i18n";
@@ -176,7 +177,7 @@ function MetricCard({
     <div
       className={`group relative overflow-hidden rounded-[22px]
         border border-border
-        bg-card p-5
+        bg-gradient-to-br from-card via-card to-muted/35 p-4 sm:p-5
         shadow-[0_3px_18px_hsl(var(--foreground)/0.055)]
         transition-all duration-200 ease-out
         hover:-translate-y-1
@@ -192,14 +193,14 @@ function MetricCard({
       <div className="relative flex items-start gap-4">
         {/* Icon */}
         <div
-          className={`flex h-[68px] w-[68px] shrink-0 items-center justify-center rounded-[19px]
+          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl
             transition-all duration-200 ease-out
             group-hover:scale-105
             group-hover:-translate-y-0.5
             ${style.icon}`}
         >
           <Icon
-            className={`h-[34px] w-[34px] transition-transform duration-200 group-hover:scale-110 ${style.iconColor}`}
+            className={`h-7 w-7 transition-transform duration-200 group-hover:scale-110 ${style.iconColor}`}
             strokeWidth={1.9}
           />
         </div>
@@ -214,7 +215,7 @@ function MetricCard({
             <MoreHorizontal className="h-5 w-5 shrink-0 text-muted-foreground/60 transition-all duration-200 group-hover:scale-110 group-hover:text-foreground" />
           </div>
 
-          <p className="mt-1.5 truncate text-[30px] font-bold leading-none tracking-[-0.035em] text-foreground transition-transform duration-200 group-hover:translate-x-0.5">
+          <p className="mt-1.5 truncate text-[26px] font-bold leading-tight tracking-[-0.035em] text-foreground transition-transform duration-200 group-hover:translate-x-0.5 sm:text-[28px]">
             {value}
           </p>
 
@@ -523,66 +524,55 @@ export default function DashboardPage() {
 
             {/* WASTE */}
             <section className="overflow-hidden rounded-[24px] border border-[#eadede] dark:border-[#472e2e] bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
-              <div className="flex items-center gap-4 border-b border-border px-6 py-5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#fde5e5] dark:bg-[#402727]">
+              <div className="flex items-center gap-4 border-b border-rose-200/70 bg-gradient-to-r from-rose-50/80 to-transparent px-6 py-5 dark:border-rose-950/60 dark:from-rose-950/20">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 shadow-sm dark:bg-rose-950/50">
                   <Trash2 className="h-6 w-6 text-[#d84b4b] dark:text-[#ef8989]" />
                 </div>
 
                 <div>
-                  <h3 className="font-bold text-foreground">
+                  <h3 className="font-bold tracking-tight text-foreground">
                     {t.dashboard.wasteSection}
                   </h3>
 
                   <p className="text-xs text-muted-foreground">
-                    Discarded products and value
+                    {locale === "ar" ? "عدد الطلبات التالفة وتكلفتها" : "Recorded waste orders and their value"}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-3">
-                <MetricCard
-                  icon={ClipboardList}
-                  label={t.dashboard.wasteCount}
-                  value={formatNumber(waste.count)}
-                  accent="red"
-                />
-
-                <MetricCard
-                  icon={DollarSign}
-                  label={t.dashboard.wasteCost}
-                  value={formatMoney(
-                    waste.cost,
-                    settings.currencySymbol
-                  )}
-                  accent="red"
-                />
-
-                <MetricCard
-                  icon={DollarSign}
-                  label={t.dashboard.wasteSellingValue}
-                  value={formatMoney(
-                    waste.sellingValue,
-                    settings.currencySymbol
-                  )}
-                  accent="red"
-                />
+              <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+                {[
+                  { icon: ClipboardList, label: locale === "ar" ? "طلبات الهالك" : "Waste orders", value: formatNumber(waste.count) },
+                  { icon: DollarSign, label: locale === "ar" ? "تكلفة الهالك" : "Waste cost", value: formatMoney(waste.cost, settings.currencySymbol) },
+                  { icon: DollarSign, label: locale === "ar" ? "قيمة المبيعات" : "Sales value", value: formatMoney(waste.sellingValue, settings.currencySymbol) },
+                ].map(({ icon: Icon, label, value }) => (
+                  <div key={label} className="flex min-w-0 items-center gap-3 rounded-2xl border border-rose-100 bg-rose-50/65 px-4 py-3.5 dark:border-rose-950/60 dark:bg-rose-950/20">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-rose-600 shadow-sm dark:bg-rose-900/30 dark:text-rose-300">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-medium text-muted-foreground">{label}</span>
+                      <span className="mt-1 block truncate text-lg font-bold tracking-tight text-foreground">{value}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             </section>
           </div>
 
           {/* PAYMENT BREAKDOWN */}
           <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_4px_20px_hsl(var(--foreground)/0.05)]">
-            <div className="px-6 py-5">
+            <div className="border-b border-border/70 bg-gradient-to-r from-muted/50 to-transparent px-6 py-5">
               <h3 className="text-[21px] font-bold tracking-[-0.02em] text-foreground">
                 {t.dashboard.paymentBreakdown}
               </h3>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                Payment methods for the selected period
+                {locale === "ar" ? "توزيع المبيعات حسب طريقة الدفع للفترة المحددة" : "Sales by payment method for the selected period"}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4">
               {paymentSummary.length === 0 ? (
                 <p className="col-span-full py-10 text-center text-sm text-muted-foreground">
                   {t.common.noResults}
@@ -613,6 +603,27 @@ export default function DashboardPage() {
                               : p.method === "split"
                                 ? t.pos.split
                                 : p.method;
+                  const paymentBrand = p.method === "cash"
+                    ? "cash"
+                    : p.method === "card"
+                      ? "visa"
+                      : isExternalMethod && (/insta\s*pay/i.test(label) || label.includes("انستا"))
+                        ? "instapay"
+                        : null;
+                  const isInstaPay = paymentBrand === "instapay";
+                  const methodStyle = isInstaPay
+                    ? "border-orange-200/80 bg-orange-50/70 text-orange-700 dark:border-orange-900/70 dark:bg-orange-950/30 dark:text-orange-300"
+                    : p.method === "cash"
+                      ? "border-emerald-200/80 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300"
+                      : isExternalMethod
+                        ? "border-emerald-200/80 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    : p.method === "waste"
+                      ? "border-rose-200/80 bg-rose-50/70 text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-300"
+                      : p.method === "card"
+                        ? "border-blue-200/80 bg-blue-50/70 text-blue-700 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-300"
+                        : p.method === "wallet"
+                          ? "border-violet-200/80 bg-violet-50/70 text-violet-700 dark:border-violet-900/70 dark:bg-violet-950/30 dark:text-violet-300"
+                          : "border-teal-200/80 bg-teal-50/70 text-teal-700 dark:border-teal-900/70 dark:bg-teal-950/30 dark:text-teal-300";
 
                   const pct =
                     paymentSummaryTotal > 0
@@ -626,23 +637,44 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={p.method}
-                      className="rounded-[18px] border border-border bg-muted/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card hover:shadow-[0_8px_20px_hsl(var(--foreground)/0.08)]"
+                      className="group rounded-[20px] border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_10px_24px_hsl(var(--foreground)/0.08)]"
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                          <Icon
-                            className="h-5 w-5"
-                            strokeWidth={2}
-                          />
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${methodStyle}`}>
+                          {paymentBrand
+                            ? <PaymentBrandMark brand={paymentBrand} className={paymentBrand === "instapay" ? "h-5 w-10" : "h-7 w-8"} />
+                            : <Icon className="h-5 w-5" strokeWidth={2} />}
                         </div>
 
-                        <span className="text-xs font-semibold text-muted-foreground">
-                          {pct}%
-                        </span>
+                        <div
+                          className={`relative grid h-11 w-11 shrink-0 place-items-center rounded-full ${methodStyle}`}
+                          role="img"
+                          aria-label={`${locale === "ar" ? "نسبة الدفع" : "Payment share"}: ${pct}%`}
+                          title={`${pct}%`}
+                        >
+                          <svg viewBox="0 0 44 44" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+                            <circle cx="22" cy="22" r="18" fill="none" stroke="currentColor" strokeOpacity=".18" strokeWidth="3.5" />
+                            <circle
+                              cx="22"
+                              cy="22"
+                              r="18"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="3.5"
+                              strokeLinecap="round"
+                              strokeDasharray={`${2 * Math.PI * 18}`}
+                              strokeDashoffset={`${2 * Math.PI * 18 * (1 - Math.min(pct, 100) / 100)}`}
+                              className="transition-[stroke-dashoffset] duration-500"
+                            />
+                          </svg>
+                          <span className="relative text-[10px] font-bold leading-none">
+                            {formatNumber(pct, 0, 1)}%
+                          </span>
+                        </div>
                       </div>
 
-                      <p className="mt-4 text-sm font-semibold text-foreground">
-                        {label}
+                      <p className="mt-4 text-sm font-bold text-foreground">
+                        {paymentBrand === "instapay" ? "InstaPay" : label}
                       </p>
 
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -650,12 +682,15 @@ export default function DashboardPage() {
                         {t.dashboard.paymentBreakdownOrders}
                       </p>
 
-                      <p className="mt-3 text-[20px] font-bold tracking-tight text-primary">
+                      <p className="mt-3 text-[20px] font-bold tracking-tight text-foreground">
                         {formatMoney(
                           p.total,
                           settings.currencySymbol
                         )}
                       </p>
+                      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div className={`h-full rounded-full transition-all ${isInstaPay ? "bg-orange-500" : p.method === "cash" ? "bg-emerald-500" : isExternalMethod ? "bg-emerald-500" : p.method === "waste" ? "bg-rose-500" : p.method === "card" ? "bg-blue-500" : p.method === "wallet" ? "bg-violet-500" : "bg-teal-500"}`} style={{ width: `${Math.max(pct, p.total > 0 ? 2 : 0)}%` }} />
+                      </div>
                     </div>
                   );
                 })

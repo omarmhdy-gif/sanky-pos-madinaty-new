@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, CreditCard, CheckCircle2, Printer, Plus, Split, CloudOff, Trash2, Search, UserRound, Phone, Gift } from "lucide-react";
-import { externalPaymentMethods, getExternalPaymentIcon } from "@/lib/externalPayment";
+import { Banknote, CreditCard, CheckCircle2, Printer, Plus, Split, CloudOff, Trash2, Search, UserRound, Phone, Gift, Wallet } from "lucide-react";
+import { builtInPaymentMethod, externalPaymentMethods, isBuiltInPaymentEnabled } from "@/lib/externalPayment";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { PaymentBrandMark } from "@/components/shared/PaymentBrandMark";
@@ -59,7 +59,11 @@ export function PaymentDialog({
   const openShift = currentUser
     ? shifts.find((s) => s.cashierId === currentUser.id && s.status === "open")
     : undefined;
-  const externalMethods = externalPaymentMethods(settings);
+  const externalMethods = externalPaymentMethods(settings).filter((method) => method.enabled !== false);
+  const cashPaymentEnabled = isBuiltInPaymentEnabled(settings, "cash");
+  const visaPaymentEnabled = isBuiltInPaymentEnabled(settings, "visa");
+  const instapayPaymentEnabled = isBuiltInPaymentEnabled(settings, "instapay");
+  const instapayMethod = builtInPaymentMethod(settings, "instapay");
 
   const [method, setMethod] = useState<PaymentMethod | null>(null);
   const [tendered, setTendered] = useState<number | null>(null);
@@ -618,7 +622,7 @@ export function PaymentDialog({
 
             {!method ? (
               <div className="grid grid-cols-3 gap-2.5">
-                <PaymentMethodButton
+                {cashPaymentEnabled && <PaymentMethodButton
                   icon={Banknote}
                   brand="cash"
                   label={t.pos.cash}
@@ -634,28 +638,34 @@ export function PaymentDialog({
                   // finalizeOrder() path a normal Cash-then-Complete tap
                   // uses, so printing/inventory/logging are all unchanged.
                   onLongPress={() => finalizeOrder("cash", total)}
-                />
-                <PaymentMethodButton
+                />}
+                {visaPaymentEnabled && <PaymentMethodButton
                   icon={CreditCard}
                   brand="visa"
                   label={t.pos.card}
                   disabled={submitting}
                   onClick={() => finalizeOrder("card")}
-                />
-                <PaymentMethodButton
+                />}
+                {instapayPaymentEnabled && <PaymentMethodButton
+                  icon={Wallet}
+                  brand="instapay"
+                  label={bilingual(instapayMethod.name, locale)}
+                  disabled={submitting}
+                  onClick={() => finalizeOrder("talabat", undefined, undefined, undefined, instapayMethod)}
+                />}
+                {cashPaymentEnabled && visaPaymentEnabled && <PaymentMethodButton
                   icon={Split}
                   label={t.pos.split}
                   onClick={() => setMethod("split")}
-                />
+                />}
                 {externalMethods.map((externalMethod) => {
-                  const ExternalIcon = getExternalPaymentIcon(externalMethod.icon);
+                  // Added tenders use one neutral external style. Historical
+                  // per-method icon fields remain stored only for old records.
                   const externalLabel = bilingual(externalMethod.name, locale);
-                  const isInstaPay = /insta\s*pay/i.test(externalLabel) || externalLabel.includes("انستا");
                   return (
                     <PaymentMethodButton
                       key={externalMethod.id}
-                      icon={ExternalIcon}
-                      brand={isInstaPay ? "instapay" : undefined}
+                      icon={Wallet}
                       label={externalLabel}
                       disabled={submitting}
                       onClick={() => finalizeOrder("talabat", undefined, undefined, undefined, externalMethod)}

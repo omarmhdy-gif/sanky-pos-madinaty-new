@@ -113,7 +113,7 @@ export default function OrdersPage() {
   const paymentIcons: Record<Exclude<PaymentMethod, "split">, typeof Banknote> = { cash: Banknote, card: CreditCard, wallet: Wallet, talabat: CreditCard, waste: Trash2 };
   const configuredExternalMethods = externalPaymentMethods(settings);
   const paymentFilters: OrdersPaymentFilter[] = [
-    "all", "cash", "card",
+    "all", "cash", "card", "external:instapay",
     ...configuredExternalMethods.map((method) => `external:${method.id}` as const),
     "talabat", "waste",
   ];
@@ -355,7 +355,9 @@ export default function OrdersPage() {
                 {m === "all"
                   ? t.orders.filterAll
                   : m.startsWith("external:")
-                  ? configuredExternalMethods.find((method) => method.id === m.slice("external:".length))?.name[locale] ?? m
+                  ? m === "external:instapay"
+                    ? (locale === "ar" ? "إنستا باي" : "InstaPay")
+                    : configuredExternalMethods.find((method) => method.id === m.slice("external:".length))?.name[locale] ?? m
                   : m === "talabat"
                   ? (locale === "ar" ? "الطلبات الخارجية" : "External payments")
                   : m === "waste"

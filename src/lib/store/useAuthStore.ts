@@ -8,6 +8,7 @@ interface AuthStore {
   currentUser: StaffUser | null;
   isAuthenticated: boolean;
   login: (user: StaffUser) => void;
+  clearLocalAuth: () => void;
   logout: () => void;
 }
 
@@ -20,6 +21,9 @@ export const useAuthStore = create<AuthStore>()(
       currentUser: null,
       isAuthenticated: false,
       login: (user) => set({ currentUser: user, isAuthenticated: true }),
+      // Clear cashier identity without calling Supabase Auth. Auth event
+      // handlers use this so SIGNED_OUT cannot recursively trigger signOut.
+      clearLocalAuth: () => set({ currentUser: null, isAuthenticated: false }),
       logout: () => {
         if (typeof window === "undefined" || !window.sankyDesktop?.isDesktop) {
           void supabase.auth.signOut();

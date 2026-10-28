@@ -8,7 +8,7 @@ import { useDeviceSettingsStore } from "@/lib/store/useDeviceSettingsStore";
 import { formatMoney, formatDateTime } from "@/lib/utils";
 import { externalPaymentLabel } from "@/lib/externalPayment";
 
-export function ReceiptView({ order }: { order: Order }) {
+export function ReceiptView({ order, preview = false }: { order: Order; preview?: boolean }) {
   const { t, locale } = useI18n();
   const settings = useDataStore((s) => s.settings);
   const branches = useBranchStore((s) => s.branches);
@@ -23,7 +23,9 @@ export function ReceiptView({ order }: { order: Order }) {
   return (
     <div
       id="receipt-print"
-      className="mx-auto font-mono text-xs text-foreground"
+      className={preview
+        ? "mx-auto rounded-sm bg-white p-5 font-mono text-xs text-slate-900 shadow-lg dark:bg-white dark:text-slate-900 [&_.text-muted-foreground]:text-slate-500 [&_.border-border]:border-slate-300"
+        : "mx-auto font-mono text-xs text-foreground"}
       style={{ width: paperWidth === "58" ? "58mm" : "80mm", maxWidth: "100%" }}
     >
       <div className="text-center">
@@ -102,9 +104,24 @@ export function ReceiptView({ order }: { order: Order }) {
       <div className="my-2 border-t border-dashed border-border" />
       <div className="flex justify-between capitalize">
         <span>{t.pos.payment}</span>
-        <span>
-          {order.payment.method === "talabat" ? externalPaymentLabel(order.payment, settings, locale) : order.payment.method === "card" ? t.pos.card : order.payment.method}
-        </span>
+        {order.payment.method === "split" ? (
+          <span className="flex flex-col items-end normal-case">
+            {order.payment.splitParts?.length ? order.payment.splitParts.map((part, index) => {
+              const methodLabel = part.method === "cash" ? t.pos.cash : part.method === "card" ? t.pos.card : t.pos.wallet;
+              return (
+                <span key={`${part.method}-${index}`}>
+                  {methodLabel}: {formatMoney(part.amount, settings.currencySymbol)}
+                </span>
+              );
+            }) : (
+              <span>{locale === "ar" ? "تفاصيل الدفع غير متاحة" : "Payment details unavailable"}</span>
+            )}
+          </span>
+        ) : (
+          <span>
+            {order.payment.method === "talabat" ? externalPaymentLabel(order.payment, settings, locale) : order.payment.method === "card" ? t.pos.card : order.payment.method}
+          </span>
+        )}
       </div>
       {order.payment.tenderedAmount !== undefined && (
         <div className="flex justify-between">

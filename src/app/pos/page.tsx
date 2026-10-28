@@ -123,9 +123,7 @@ export default function PosPage() {
   const activeDiningTables = useMemo(() => diningTables
     .filter((table) => table.sectionId === activeDiningSectionId)
     .sort((a, b) => a.position - b.position)
-    .map((table, index) => ({ table, ...getDiningPosition(table, index) })), [activeDiningSectionId, diningTables]);
-  const diningTableRows = Math.max(4, ...activeDiningTables.map((item) => item.y + 1));
-  const diningTablesByCell = new Map(activeDiningTables.map((item) => [`${item.x}:${item.y}`, item.table]));
+    .map((table, index, sectionTables) => ({ table, ...getDiningPosition(table, index, sectionTables.length) })), [activeDiningSectionId, diningTables]);
 
   const filteredProducts = useMemo(() => {
     let list = products.filter((p) => p.isActive);
@@ -331,14 +329,12 @@ export default function PosPage() {
             toast(locale === "ar" ? "تم حفظ الطلب على الطاولة ويمكنك فتحه لاحقًا" : "Order saved on the table; you can reopen it later", "success");
           }}>{locale === "ar" ? "حفظ وترك الطاولة" : "Save and leave table"}</Button></div>}
           {diningSections.length ? <div className="flex flex-wrap gap-2 border-b pb-3">{diningSections.map((section) => <Button key={section.id} type="button" variant={activeDiningSectionId === section.id ? "default" : "outline"} size="sm" onClick={() => setActiveDiningSectionId(section.id)}>{getDiningSectionLabel(section.name, locale)}<span className="ms-1 opacity-75">{diningTables.filter((table) => table.sectionId === section.id).length}</span></Button>)}</div> : null}
-          {diningSections.length ? <div className="max-h-[55vh] overflow-y-auto no-scrollbar rounded-2xl border border-dashed bg-muted/30 p-3"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{getDiningSectionLabel(diningSections.find((section) => section.id === activeDiningSectionId)?.name ?? "", locale)}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "مخطط الطاولات والمساحات الفارغة" : "Tables and open spaces"}</span></div><div className="grid min-w-[420px] grid-cols-4 gap-2 sm:gap-3">{Array.from({ length: diningTableRows * 4 }, (_, cellIndex) => {
-            const table = diningTablesByCell.get(`${cellIndex % 4}:${Math.floor(cellIndex / 4)}`);
-            if (!table) return <div key={`empty-${cellIndex}`} aria-hidden="true" className="aspect-square min-h-20 rounded-xl border border-dashed border-border/40 bg-background/20" />;
+          {diningSections.length ? <div className="rounded-2xl border border-dashed bg-muted/30 p-3"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">{getDiningSectionLabel(diningSections.find((section) => section.id === activeDiningSectionId)?.name ?? "", locale)}</h3><span className="text-xs text-muted-foreground">{locale === "ar" ? "مخطط الطاولات والمساحات الفارغة" : "Tables and open spaces"}</span></div><div className="relative h-[420px] overflow-hidden rounded-xl border border-dashed border-border/70 bg-background/40 sm:h-[500px]">{activeDiningTables.map(({ table, x, y }) => {
             const occupied = occupiedTableIds.includes(table.id);
             const draft = tableOrders[table.id];
             const count = draft?.lines.reduce((sum, line) => sum + line.qty, 0) ?? 0;
             const displayName = getDiningTableLabel(table.name, locale);
-            return <div key={table.id} className={`flex aspect-square min-h-20 flex-col justify-between rounded-2xl border p-2 transition ${occupied ? "border-amber-500/30 bg-amber-500/5" : "border-emerald-500/25 bg-card"}`}>
+            return <div key={table.id} style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" }} className={`absolute flex h-28 w-[min(150px,23vw)] flex-col justify-between rounded-2xl border p-2 shadow-sm transition ${occupied ? "border-amber-500/30 bg-amber-500/5" : "border-emerald-500/25 bg-card"}`}>
               <div className="flex items-center justify-between gap-1"><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${occupied ? "bg-amber-500/10 text-amber-700" : "bg-emerald-500/10 text-emerald-700"}`}>{occupied ? (locale === "ar" ? "مشغولة" : "Occupied") : (locale === "ar" ? "فاضية" : "Available")}</span><span className="text-[10px] text-muted-foreground">{table.seats} {locale === "ar" ? "مقاعد" : "seats"}</span></div>
               <Button type="button" variant={occupied ? "secondary" : "outline"} className="h-16 w-full flex-col gap-1 px-1 text-xs sm:h-20 sm:text-sm" onClick={() => {
                 const currentCart = useCartStore.getState();
@@ -350,7 +346,7 @@ export default function PosPage() {
                 toast(occupied && count ? (locale === "ar" ? `تم استكمال طلب ${table.name} (${count} صنف)` : `Reopened ${displayName} order (${count} items)`) : (locale === "ar" ? `بدأ طلب على ${table.name}` : `Order started at ${displayName}`), "success");
               }}><Utensils className="h-4 w-4" /><span className="font-semibold">{displayName}</span>{occupied && count > 0 && <span className="text-[10px]">{count} {locale === "ar" ? "صنف" : "items"}</span>}</Button>
             </div>;
-          })}</div></div> : <div className="rounded-xl border border-dashed p-7 text-center text-sm text-muted-foreground">{locale === "ar" ? "أضف قسمًا وطاولات من صفحة الإعدادات." : "Add sections and tables first from Settings."}</div>}
+          })}{activeDiningTables.length === 0 && <div className="absolute inset-0 grid place-items-center text-center text-sm text-muted-foreground">{locale === "ar" ? "لا توجد طاولات في هذا القسم." : "No tables in this section."}</div>}</div></div> : <div className="rounded-xl border border-dashed p-7 text-center text-sm text-muted-foreground">{locale === "ar" ? "أضف قسمًا وطاولات من صفحة الإعدادات." : "Add sections and tables first from Settings."}</div>}
           <DialogFooter><Button type="button" variant="outline" onClick={() => setTablePickerOpen(false)}>{t.common.close}</Button></DialogFooter>
         </DialogContent>
       </Dialog>

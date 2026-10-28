@@ -390,7 +390,7 @@ export interface ShopSettings {
   /** Shared cashier table map and active table orders for website/desktop POS. */
   diningLayout?: {
     sections: { id: string; name: string }[];
-    tables: { id: string; sectionId: string; name: string; seats: number; position: number }[];
+    tables: { id: string; sectionId: string; name: string; seats: number; position: number; positionX?: number; positionY?: number; positionXPercent?: number; positionYPercent?: number }[];
     occupiedTableIds?: string[];
     tableOrders?: Record<string, {
       lines: CartLine[];
@@ -408,6 +408,7 @@ export interface ExternalPaymentMethod {
   id: string;
   name: { en: string; ar: string };
   icon: string;
+  enabled?: boolean;
 }
 
 /** A roster of employees clocking in/out for attendance — entirely separate

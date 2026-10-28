@@ -1,37 +1,70 @@
 "use client";
 
-import { useMemo, useRef, useState, type ChangeEvent } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, ChefHat, Download, FileSpreadsheet, ScrollText, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Boxes, CheckCircle2, ChefHat, CircleAlert, Download, FileSpreadsheet, Package, Search, ScrollText, Upload } from "lucide-react";
 import * as XLSX from "xlsx";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProductFormDialog } from "@/components/products/ProductFormDialog";
-import { ReceiveStockDialog } from "@/components/inventory/ReceiveStockDialog";
-import { AdjustStockDialog } from "@/components/inventory/AdjustStockDialog";
+import { DateFilterBar } from "@/components/shared/DateFilterBar";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useI18n, bilingual } from "@/lib/i18n";
-import { formatMoney, formatNumber, cn, isImageUrl } from "@/lib/utils";
+import { formatMoney, formatNumber, cn } from "@/lib/utils";
 import { recipeCost, estimatedProfit, estimatedMargin } from "@/lib/inventory";
+import { dateRangeForFilter, ordersInDateRange, type DateFilterKey } from "@/lib/analytics";
 import { toast } from "@/components/ui/toast";
-import type { InventoryItem, Product, RecipeIngredient } from "@/lib/types";
+import type { RecipeIngredient } from "@/lib/types";
 
 export default function RecipesPage() {
   const { t, locale } = useI18n();
   const products = useDataStore((s) => s.products);
   const inventoryItems = useDataStore((s) => s.inventoryItems);
   const stockMovements = useDataStore((s) => s.stockMovements);
+  const purchases = useDataStore((s) => s.purchases);
+  const orders = useDataStore((s) => s.orders);
   const settings = useDataStore((s) => s.settings);
   const updateProductRecipe = useDataStore((s) => s.updateProductRecipe);
+  const fetchOrdersInRange = useDataStore((s) => s.fetchOrdersInRange);
 
-  const [tab, setTab] = useState<"recipes" | "stock">("recipes");
+  const [tab, setTab] = useState<"recipes" | "inventory" | "consumption" | "movements">("recipes");
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [recipeFilter, setRecipeFilter] = useState<"all" | "configured" | "missing">("all");
+  const [inventorySearch, setInventorySearch] = useState("");
+  const [movementSearch, setMovementSearch] = useState("");
+  const [productUsageSearch, setProductUsageSearch] = useState("");
+  const [ingredientUsageSearch, setIngredientUsageSearch] = useState("");
+  const [consumptionDateFilter, setConsumptionDateFilter] = useState<DateFilterKey>("month");
+  const [consumptionCustomFrom, setConsumptionCustomFrom] = useState("");
+  const [consumptionCustomTo, setConsumptionCustomTo] = useState("");
+  const [movementDateFilter, setMovementDateFilter] = useState<DateFilterKey>("month");
+  const [movementCustomFrom, setMovementCustomFrom] = useState("");
+  const [movementCustomTo, setMovementCustomTo] = useState("");
   const [formOpen, setFormOpen] = useState(false);
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItem | null>(null);
-  const [receiveOpen, setReceiveOpen] = useState(false);
-  const [adjustOpen, setAdjustOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
+
+  const consumptionDateRange = useMemo(() => dateRangeForFilter(
+    consumptionDateFilter,
+    consumptionCustomFrom ? new Date(consumptionCustomFrom) : undefined,
+    consumptionCustomTo ? new Date(consumptionCustomTo) : undefined
+  ), [consumptionDateFilter, consumptionCustomFrom, consumptionCustomTo]);
+
+  useEffect(() => {
+    if (consumptionDateFilter === "all") {
+      fetchOrdersInRange(new Date(0), new Date());
+    } else if (consumptionDateRange) {
+      fetchOrdersInRange(consumptionDateRange.from, consumptionDateRange.to);
+    }
+  }, [consumptionDateFilter, consumptionCustomFrom, consumptionCustomTo, consumptionDateRange, fetchOrdersInRange]);
+
+  const movementDateRange = useMemo(() => dateRangeForFilter(
+    movementDateFilter,
+    movementCustomFrom ? new Date(movementCustomFrom) : undefined,
+    movementCustomTo ? new Date(movementCustomTo) : undefined
+  ), [movementDateFilter, movementCustomFrom, movementCustomTo]);
 
   const rows = useMemo(() => {
     return products
@@ -44,6 +77,118 @@ export default function RecipesPage() {
       }))
       .sort((a, b) => a.margin - b.margin);
   }, [products, inventoryItems]);
+
+  const recipeStats = useMemo(() => {
+    const configured = rows.filter(({ product }) => (product.recipe?.length ?? 0) > 0).length;
+    return {
+      configured,
+      missing: rows.length - configured,
+      ingredientCount: inventoryItems.length,
+    };
+  }, [rows, inventoryItems]);
+
+  const visibleRows = useMemo(() => {
+    const query = recipeSearch.trim().toLocaleLowerCase();
+    return rows.filter(({ product }) => {
+      const ingredients = product.recipe ?? [];
+      if (recipeFilter === "configured" && ingredients.length === 0) return false;
+      if (recipeFilter === "missing" && ingredients.length > 0) return false;
+      if (!query) return true;
+      const productMatch = `${product.name.en} ${product.name.ar}`.toLocaleLowerCase().includes(query);
+      const ingredientMatch = ingredients.some((entry) => {
+        const item = inventoryItems.find((candidate) => candidate.id === entry.inventoryItemId);
+        return item && `${item.name.en} ${item.name.ar}`.toLocaleLowerCase().includes(query);
+      });
+      return productMatch || ingredientMatch;
+    });
+  }, [rows, recipeSearch, recipeFilter, inventoryItems]);
+
+  const purchasesByItem = useMemo(() => {
+    const map = new Map<string, (typeof purchases)[number]>();
+    for (const purchase of purchases) {
+      const current = map.get(purchase.inventoryItemId);
+      if (!current || new Date(purchase.createdAt).getTime() > new Date(current.createdAt).getTime()) {
+        map.set(purchase.inventoryItemId, purchase);
+      }
+    }
+    return map;
+  }, [purchases]);
+
+  const rangeMovements = useMemo(() => movementDateFilter === "custom" && !movementDateRange
+    ? []
+    : !movementDateRange ? stockMovements : stockMovements.filter((movement) => {
+        const created = new Date(movement.createdAt);
+        return created >= movementDateRange.from && created <= movementDateRange.to;
+      }), [stockMovements, movementDateRange, movementDateFilter]);
+
+  const inventoryStats = useMemo(() => ({
+    itemCount: inventoryItems.length,
+    lowStock: inventoryItems.filter((item) => item.criticalThreshold !== undefined && item.quantity <= item.criticalThreshold).length,
+    inventoryValue: inventoryItems.reduce((sum, item) => sum + item.quantity * (item.lastPurchaseCost ?? 0), 0),
+  }), [inventoryItems]);
+
+  const movementStats = useMemo(() => ({
+    movementCount: rangeMovements.length,
+    stockIn: rangeMovements.reduce((sum, movement) => sum + Math.max(0, movement.quantityDelta), 0),
+    stockOut: rangeMovements.reduce((sum, movement) => sum + Math.max(0, -movement.quantityDelta), 0),
+  }), [rangeMovements]);
+
+  const visibleInventoryItems = useMemo(() => {
+    const query = inventorySearch.trim().toLocaleLowerCase();
+    if (!query) return inventoryItems;
+    return inventoryItems.filter((item) => `${item.name.en} ${item.name.ar}`.toLocaleLowerCase().includes(query));
+  }, [inventoryItems, inventorySearch]);
+
+  const visibleMovements = useMemo(() => {
+    const query = movementSearch.trim().toLocaleLowerCase();
+    if (!query) return rangeMovements;
+    return rangeMovements.filter((movement) => {
+      const item = inventoryItems.find((candidate) => candidate.id === movement.inventoryItemId);
+      const name = movement.itemName ? `${movement.itemName.en} ${movement.itemName.ar}` : item ? `${item.name.en} ${item.name.ar}` : "";
+      return `${name} ${movement.employeeName} ${movement.reason} ${movement.orderId ?? ""}`.toLocaleLowerCase().includes(query);
+    });
+  }, [rangeMovements, inventoryItems, movementSearch]);
+
+  const productConsumptionRows = useMemo(() => {
+    if (consumptionDateFilter === "custom" && !consumptionDateRange) return [];
+    const soldByProduct = new Map<string, number>();
+    for (const order of ordersInDateRange(orders, consumptionDateRange)) {
+      for (const line of order.lines) {
+        soldByProduct.set(line.productId, (soldByProduct.get(line.productId) ?? 0) + line.qty);
+      }
+    }
+
+    return products.flatMap((product) => (product.recipe ?? []).flatMap((ingredient) => {
+      const item = inventoryItems.find((candidate) => candidate.id === ingredient.inventoryItemId);
+      if (!item) return [];
+      const soldQty = soldByProduct.get(product.id) ?? 0;
+      const consumedQty = ingredient.qty * soldQty;
+      return [{
+        product,
+        item,
+        recipeQty: ingredient.qty,
+        soldQty,
+        consumedQty,
+        cost: consumedQty * (item.lastPurchaseCost ?? 0),
+      }];
+    }));
+  }, [products, inventoryItems, orders, consumptionDateRange, consumptionDateFilter]);
+
+  const visibleProductConsumption = useMemo(() => {
+    const productQuery = productUsageSearch.trim().toLocaleLowerCase();
+    const ingredientQuery = ingredientUsageSearch.trim().toLocaleLowerCase();
+    return productConsumptionRows.filter(({ product, item }) => {
+      const productMatches = !productQuery || `${product.name.en} ${product.name.ar}`.toLocaleLowerCase().includes(productQuery);
+      const ingredientMatches = !ingredientQuery || `${item.name.en} ${item.name.ar}`.toLocaleLowerCase().includes(ingredientQuery);
+      return productMatches && ingredientMatches;
+    });
+  }, [productConsumptionRows, productUsageSearch, ingredientUsageSearch]);
+
+  const consumptionStats = useMemo(() => ({
+    products: new Set(productConsumptionRows.filter((row) => row.soldQty > 0).map((row) => row.product.id)).size,
+    ingredients: new Set(productConsumptionRows.filter((row) => row.soldQty > 0).map((row) => row.item.id)).size,
+    totalCost: productConsumptionRows.reduce((sum, row) => sum + row.cost, 0),
+  }), [productConsumptionRows]);
 
   const editing = editingIndex !== null ? rows[editingIndex]?.product ?? null : null;
 
@@ -219,147 +364,229 @@ export default function RecipesPage() {
       <div className="space-y-4 p-4 sm:p-6 pb-10">
         <p className="text-sm text-muted-foreground">{t.recipes.subtitle}</p>
 
-        <div role="tablist" aria-label={t.recipes.title} className="flex w-full gap-2 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1 sm:w-fit">
+        <div role="tablist" aria-label={t.recipes.title} className="flex w-full flex-wrap gap-1.5 rounded-xl border border-border bg-muted/40 p-1 sm:w-fit">
           <button role="tab" aria-selected={tab === "recipes"} onClick={() => setTab("recipes")} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors", tab === "recipes" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-card/60")}>
             <ChefHat className="h-4 w-4" />{t.recipes.recipeSheet}
           </button>
-          <button role="tab" aria-selected={tab === "stock"} onClick={() => setTab("stock")} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors", tab === "stock" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-card/60")}>
-            <ScrollText className="h-4 w-4" />{t.recipes.stockSheet}
+          <button role="tab" aria-selected={tab === "inventory"} onClick={() => setTab("inventory")} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors", tab === "inventory" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-card/60")}>
+            <Package className="h-4 w-4" />{t.recipes.inventoryReport}
+          </button>
+          <button role="tab" aria-selected={tab === "consumption"} onClick={() => setTab("consumption")} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors", tab === "consumption" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-card/60")}>
+            <Boxes className="h-4 w-4" />{t.recipes.productConsumption}
+          </button>
+          <button role="tab" aria-selected={tab === "movements"} onClick={() => setTab("movements")} className={cn("flex shrink-0 items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors", tab === "movements" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-card/60")}>
+            <ScrollText className="h-4 w-4" />{t.recipes.movementHistory}
           </button>
         </div>
 
         {tab === "recipes" && (
           <>
-          <div className="flex flex-wrap justify-end gap-2">
-            <input ref={importInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleRecipeImport} />
-            <Button variant="outline" onClick={exportRecipes}><Download className="h-4 w-4" />{t.recipes.exportRecipes}</Button>
-            <Button variant="outline" onClick={downloadRecipeTemplate}><FileSpreadsheet className="h-4 w-4" />{t.recipes.downloadTemplate}</Button>
-            <Button onClick={() => importInputRef.current?.click()} disabled={importing}><Upload className="h-4 w-4" />{importing ? t.common.loading : t.recipes.importRecipes}</Button>
-          </div>
-          {rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
-            <ChefHat className="h-10 w-10 opacity-30" />
-            <p className="text-sm">{t.common.noResults}</p>
-          </div>
-        ) : (
-          <div className="overflow-hidden rounded-xl border border-border divide-y divide-border">
-            {rows.map(({ product, cost, profit, margin }, index) => (
-              <button
-                key={product.id}
-                onClick={() => handleEdit(index)}
-                className="flex w-full items-center justify-between gap-3 bg-card px-4 py-3.5 text-start hover:bg-accent transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {isImageUrl(product.image) ? (
-                    <img src={product.image} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover" />
-                  ) : (
-                    <span className="text-lg shrink-0">{product.image}</span>
-                  )}
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">{bilingual(product.name, locale)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.products.recipeCost}: {formatMoney(cost, settings.currencySymbol)} · {t.common.price}:{" "}
-                      {formatMoney(product.price, settings.currencySymbol)}
-                    </p>
+            <Card className="overflow-hidden border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card">
+              <CardContent className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
+                {[
+                  { label: t.recipes.configuredRecipes, value: recipeStats.configured, Icon: CheckCircle2, tone: "text-emerald-600 dark:text-emerald-400" },
+                  { label: t.recipes.missingRecipes, value: recipeStats.missing, Icon: CircleAlert, tone: recipeStats.missing ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground" },
+                  { label: t.recipes.ingredientCount, value: recipeStats.ingredientCount, Icon: Boxes, tone: "text-violet-600 dark:text-violet-400" },
+                ].map(({ label, value, Icon, tone }) => (
+                  <div key={label} className="flex items-center gap-2.5 rounded-xl border border-border/60 bg-background/70 px-3 py-2.5">
+                    <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-muted/70", tone)}><Icon className="h-4 w-4" /></span>
+                    <div className="min-w-0"><p className="truncate text-xs text-muted-foreground">{label}</p><p className="mt-0.5 text-lg font-bold tabular-nums">{formatNumber(value)}</p></div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="space-y-3 p-3 sm:p-4">
+                <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t.recipes.recipeFilters}>
+                  {([
+                    ["all", t.recipes.allProducts],
+                    ["configured", t.recipes.configuredRecipes],
+                    ["missing", t.recipes.missingRecipes],
+                  ] as const).map(([key, label]) => (
+                    <Button key={key} size="sm" variant={recipeFilter === key ? "default" : "outline"} onClick={() => setRecipeFilter(key)} aria-pressed={recipeFilter === key}>
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                  <div className="relative min-w-0 flex-1">
+                    <span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span>
+                    <Input value={recipeSearch} onChange={(event) => setRecipeSearch(event.target.value)} placeholder={t.recipes.searchProducts} aria-label={t.recipes.searchProducts} className="ps-11" />
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <input ref={importInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleRecipeImport} />
+                    <Button size="sm" variant="outline" onClick={exportRecipes}><Download className="h-4 w-4" />{t.recipes.exportRecipes}</Button>
+                    <Button size="sm" variant="outline" onClick={downloadRecipeTemplate}><FileSpreadsheet className="h-4 w-4" />{t.recipes.downloadTemplate}</Button>
+                    <Button size="sm" onClick={() => importInputRef.current?.click()} disabled={importing}><Upload className="h-4 w-4" />{importing ? t.common.loading : t.recipes.importRecipes}</Button>
                   </div>
                 </div>
-                <div className="shrink-0 text-end">
-                  <p className={cn("text-sm font-bold", profit >= 0 ? "text-success" : "text-destructive")}>
-                    {formatMoney(profit, settings.currencySymbol)}
-                  </p>
-                  <p className={cn("text-xs", margin >= 0 ? "text-muted-foreground" : "text-destructive")}>
-                    {margin.toFixed(1)}%
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-          )}
+              </CardContent>
+            </Card>
+
+            {rows.length === 0 || visibleRows.length === 0 ? (
+              <Card>
+                <CardContent className="flex min-h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+                  <ChefHat className="h-10 w-10 opacity-40" />
+                  <p className="text-sm">{rows.length === 0 ? t.common.noResults : t.recipes.noMatchingProducts}</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                {visibleRows.map(({ product, cost, profit, margin }) => {
+                  const index = rows.findIndex((row) => row.product.id === product.id);
+                  const ingredientCount = product.recipe?.length ?? 0;
+                  const hasRecipe = ingredientCount > 0;
+                  return (
+                    <button
+                      key={product.id}
+                      onClick={() => handleEdit(index)}
+                      className="group flex min-h-36 flex-col rounded-xl border border-border bg-card p-3 text-start shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex w-full min-w-0 items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold group-hover:text-primary">{bilingual(product.name, locale)}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{hasRecipe ? t.recipes.ingredientCountLabel.replace("{count}", formatNumber(ingredientCount)) : t.recipes.missingRecipes}</p>
+                        </div>
+                        <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold", hasRecipe ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300")}>
+                          {hasRecipe ? <CheckCircle2 className="h-3 w-3" /> : <CircleAlert className="h-3 w-3" />}{hasRecipe ? t.recipes.configuredStatus : t.recipes.missingStatus}
+                        </span>
+                      </div>
+                      <div className="mt-auto grid w-full grid-cols-3 gap-2 border-t border-border/70 pt-2.5">
+                        <div className="min-w-0"><p className="truncate text-[10px] text-muted-foreground">{t.products.recipeCost}</p><p className="mt-1 truncate text-xs font-semibold tabular-nums">{formatMoney(cost, settings.currencySymbol)}</p></div>
+                        <div className="min-w-0"><p className="truncate text-[10px] text-muted-foreground">{t.products.estimatedProfit}</p><p className={cn("mt-1 truncate text-xs font-semibold tabular-nums", profit >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-destructive")}>{formatMoney(profit, settings.currencySymbol)}</p></div>
+                        <div className="min-w-0 text-end"><p className="truncate text-[10px] text-muted-foreground">{t.products.estimatedMargin}</p><p className={cn("mt-1 truncate text-xs font-bold tabular-nums", margin >= 0 ? "text-primary" : "text-destructive")}>{margin.toFixed(1)}%</p></div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
 
-        {tab === "stock" && (
-          <div className="space-y-5">
+        {tab === "inventory" && (
+          <div className="space-y-4">
+            <Card className="border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card">
+              <CardContent className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
+                {[
+                  { label: t.recipes.inventoryItemsCount, value: formatNumber(inventoryStats.itemCount), Icon: Package, tone: "text-primary" },
+                  { label: t.recipes.lowStockItems, value: formatNumber(inventoryStats.lowStock), Icon: CircleAlert, tone: inventoryStats.lowStock ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400" },
+                  { label: t.recipes.inventoryValue, value: formatMoney(inventoryStats.inventoryValue, settings.currencySymbol), Icon: Boxes, tone: "text-violet-600 dark:text-violet-400" },
+                ].map(({ label, value, Icon, tone }) => (
+                  <div key={label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-3.5 py-3">
+                    <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted/70", tone)}><Icon className="h-5 w-5" /></span>
+                    <div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 truncate text-lg font-bold tabular-nums">{value}</p></div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t.recipes.stockSheet}</CardTitle>
-                <p className="text-sm text-muted-foreground">{t.recipes.stockSheetHint}</p>
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div><CardTitle className="text-base">{t.recipes.inventoryReport}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{t.recipes.inventoryReportHint}</p></div>
+                  <div className="relative w-full md:max-w-sm">
+                    <span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span>
+                    <Input value={inventorySearch} onChange={(event) => setInventorySearch(event.target.value)} placeholder={t.recipes.searchMaterials} aria-label={t.recipes.searchMaterials} className="ps-11" />
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
-                {inventoryItems.length === 0 ? (
-                  <p className="p-6 text-center text-sm text-muted-foreground">{t.common.noResults}</p>
-                ) : (
+                {visibleInventoryItems.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{t.common.noResults}</p> : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[680px] text-sm">
-                      <thead className="border-y border-border bg-muted/40 text-xs text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th>
-                          <th className="px-4 py-3 text-end font-medium">{t.inventory.currentStock}</th>
-                          <th className="px-4 py-3 text-end font-medium">{t.recipes.actions}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inventoryItems.map((item) => (
-                          <tr key={item.id} className="border-b border-border/60 last:border-0">
-                            <td className="px-4 py-3 font-medium">{bilingual(item.name, locale)}</td>
-                            <td className="px-4 py-3 text-end tabular-nums">{formatNumber(item.quantity, 0, 3)} {item.unit ?? t.inventory.pieceUnit}</td>
-                            <td className="px-4 py-3">
-                              <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" onClick={() => { setSelectedInventoryItem(item); setReceiveOpen(true); }}>
-                                  <ArrowDownToLine className="h-3.5 w-3.5" />{t.recipes.receiveMaterial}
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={() => { setSelectedInventoryItem(item); setAdjustOpen(true); }}>
-                                  <ArrowUpFromLine className="h-3.5 w-3.5" />{t.recipes.issueMaterial}
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
+                    <table className="w-full min-w-[920px] text-sm">
+                      <thead className="border-y border-border bg-muted/40 text-xs text-muted-foreground"><tr>
+                        <th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th>
+                        <th className="px-4 py-3 text-end font-medium">{t.inventory.currentStock}</th>
+                        <th className="px-4 py-3 text-end font-medium">{t.recipes.costPerUnit}</th>
+                        <th className="px-4 py-3 text-end font-medium">{t.recipes.stockValue}</th>
+                        <th className="px-4 py-3 text-start font-medium">{t.recipes.lastPurchase}</th>
+                      </tr></thead>
+                      <tbody>{visibleInventoryItems.map((item) => {
+                        const isLow = item.criticalThreshold !== undefined && item.quantity <= item.criticalThreshold;
+                        const latestPurchase = purchasesByItem.get(item.id);
+                        const purchaseUnit = latestPurchase?.purchaseUnit ?? item.purchaseUnit ?? item.unit ?? t.inventory.pieceUnit;
+                        return <tr key={item.id} className="border-b border-border/60 last:border-0">
+                          <td className="px-4 py-3"><p className="font-medium">{bilingual(item.name, locale)}</p>{item.purchaseUnit && item.type === "measured" && <p className="mt-0.5 text-xs text-muted-foreground">{t.recipes.purchaseUnit}: {item.purchaseUnit} · 1 {item.purchaseUnit} = {formatNumber(item.conversionFactor ?? 1)} {item.unit ?? t.inventory.pieceUnit}</p>}</td>
+                          <td className="px-4 py-3 text-end tabular-nums"><span className={cn("font-semibold", isLow && "text-amber-700 dark:text-amber-300")}>{formatNumber(item.quantity, 0, 3)} {item.unit ?? t.inventory.pieceUnit}</span>{isLow && <span className="ms-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">{t.recipes.lowStockBadge}</span>}</td>
+                          <td className="px-4 py-3 text-end tabular-nums">{formatMoney(item.lastPurchaseCost ?? 0, settings.currencySymbol)}<p className="text-xs text-muted-foreground">/ {item.unit ?? t.inventory.pieceUnit}</p></td>
+                          <td className="px-4 py-3 text-end font-semibold tabular-nums">{formatMoney(item.quantity * (item.lastPurchaseCost ?? 0), settings.currencySymbol)}</td>
+                          <td className="px-4 py-3">{latestPurchase ? <><p className="font-medium">{new Date(latestPurchase.createdAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US")}</p><p className="mt-0.5 text-xs text-muted-foreground">{formatNumber(latestPurchase.purchaseQuantity ?? latestPurchase.quantity, 0, 3)} {purchaseUnit} · {t.recipes.purchaseTotal}: {formatMoney(latestPurchase.totalCost, settings.currencySymbol)}</p><p className="text-xs text-muted-foreground">{latestPurchase.supplier || latestPurchase.employeeName || "—"}</p></> : <span className="text-muted-foreground">{t.recipes.noPurchase}</span>}</td>
+                        </tr>;
+                      })}</tbody>
                     </table>
                   </div>
                 )}
               </CardContent>
             </Card>
+          </div>
+        )}
 
+        {tab === "consumption" && (
+          <div className="space-y-4">
+            <DateFilterBar filter={consumptionDateFilter} onFilterChange={setConsumptionDateFilter} customFrom={consumptionCustomFrom} customTo={consumptionCustomTo} onCustomChange={(from, to) => { setConsumptionCustomFrom(from); setConsumptionCustomTo(to); }} />
+            <Card className="border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card">
+              <CardContent className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
+                {[
+                  { label: t.recipes.productsSold, value: formatNumber(consumptionStats.products), Icon: Package, tone: "text-primary" },
+                  { label: t.recipes.ingredientsUsed, value: formatNumber(consumptionStats.ingredients), Icon: Boxes, tone: "text-violet-600 dark:text-violet-400" },
+                  { label: t.recipes.estimatedConsumptionCost, value: formatMoney(consumptionStats.totalCost, settings.currencySymbol), Icon: ScrollText, tone: "text-emerald-600 dark:text-emerald-400" },
+                ].map(({ label, value, Icon, tone }) => <div key={label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-3.5 py-3"><span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted/70", tone)}><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 truncate text-lg font-bold tabular-nums">{value}</p></div></div>)}
+              </CardContent>
+            </Card>
             <Card>
-              <CardHeader className="pb-3"><CardTitle className="text-base">{t.recipes.movementHistory}</CardTitle></CardHeader>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">{t.recipes.productConsumption}</CardTitle>
+                <p className="text-sm text-muted-foreground">{t.recipes.productConsumptionHint}</p>
+                <div className="grid gap-2 pt-2 md:grid-cols-2">
+                  <div className="relative"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={productUsageSearch} onChange={(event) => setProductUsageSearch(event.target.value)} placeholder={t.recipes.searchProducts} aria-label={t.recipes.searchProducts} className="ps-11" /></div>
+                  <div className="relative"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={ingredientUsageSearch} onChange={(event) => setIngredientUsageSearch(event.target.value)} placeholder={t.recipes.searchMaterials} aria-label={t.recipes.searchMaterials} className="ps-11" /></div>
+                </div>
+              </CardHeader>
               <CardContent className="p-0">
-                {stockMovements.length === 0 ? (
-                  <p className="p-6 text-center text-sm text-muted-foreground">{t.recipes.noMovements}</p>
-                ) : (
-                  <div className="max-h-[520px] overflow-auto">
-                    <table className="w-full min-w-[760px] text-sm">
-                      <thead className="sticky top-0 border-y border-border bg-card text-xs text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-3 text-start font-medium">{t.expenses.date}</th>
-                          <th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th>
-                          <th className="px-4 py-3 text-end font-medium">{t.recipes.stockIn}</th>
-                          <th className="px-4 py-3 text-end font-medium">{t.recipes.stockOut}</th>
-                          <th className="px-4 py-3 text-start font-medium">{t.inventory.reason}</th>
-                          <th className="px-4 py-3 text-start font-medium">{t.purchases.employee}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stockMovements.map((movement) => {
-                          const item = inventoryItems.find((candidate) => candidate.id === movement.inventoryItemId);
-                          const name = movement.itemName ? bilingual(movement.itemName, locale) : item ? bilingual(item.name, locale) : t.inventory.unknownItem;
-                          const reason = t.inventory.reasons[movement.reason];
-                          return (
-                            <tr key={movement.id} className="border-b border-border/60 last:border-0">
-                              <td className="px-4 py-3 text-muted-foreground">{new Date(movement.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-US")}</td>
-                              <td className="px-4 py-3 font-medium">{name}</td>
-                              <td className="px-4 py-3 text-end tabular-nums text-success">{movement.quantityDelta > 0 ? `+${formatNumber(movement.quantityDelta, 0, 3)}` : "—"}</td>
-                              <td className="px-4 py-3 text-end tabular-nums text-destructive">{movement.quantityDelta < 0 ? formatNumber(Math.abs(movement.quantityDelta), 0, 3) : "—"}</td>
-                              <td className="px-4 py-3">{reason}</td>
-                              <td className="px-4 py-3 text-muted-foreground">{movement.employeeName}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                {visibleProductConsumption.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{t.recipes.noConsumption}</p> : <div className="overflow-x-auto">
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead className="border-y border-border bg-muted/40 text-xs text-muted-foreground"><tr><th className="px-4 py-3 text-start font-medium">{t.products.title}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.recipeQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.soldQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.consumedQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.estimatedConsumptionCost}</th></tr></thead>
+                    <tbody>{visibleProductConsumption.map((row) => <tr key={`${row.product.id}:${row.item.id}`} className="border-b border-border/60 last:border-0"><td className="px-4 py-3 font-medium">{bilingual(row.product.name, locale)}</td><td className="px-4 py-3">{bilingual(row.item.name, locale)}</td><td className="px-4 py-3 text-end tabular-nums">{formatNumber(row.recipeQty, 0, 3)} {row.item.unit ?? t.inventory.pieceUnit}</td><td className="px-4 py-3 text-end tabular-nums">{formatNumber(row.soldQty, 0, 3)}</td><td className="px-4 py-3 text-end font-medium tabular-nums">{formatNumber(row.consumedQty, 0, 3)} {row.item.unit ?? t.inventory.pieceUnit}</td><td className="px-4 py-3 text-end font-semibold tabular-nums">{formatMoney(row.cost, settings.currencySymbol)}</td></tr>)}</tbody>
+                  </table>
+                </div>}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {tab === "movements" && (
+          <div className="space-y-4">
+            <DateFilterBar filter={movementDateFilter} onFilterChange={setMovementDateFilter} customFrom={movementCustomFrom} customTo={movementCustomTo} onCustomChange={(from, to) => { setMovementCustomFrom(from); setMovementCustomTo(to); }} />
+            <Card className="border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card">
+              <CardContent className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
+                {[
+                  { label: t.recipes.movementCount, value: formatNumber(movementStats.movementCount), Icon: ScrollText, tone: "text-primary" },
+                  { label: t.recipes.inboundMovements, value: formatNumber(rangeMovements.filter((movement) => movement.quantityDelta > 0).length), Icon: Package, tone: "text-emerald-600 dark:text-emerald-400" },
+                  { label: t.recipes.outboundMovements, value: formatNumber(rangeMovements.filter((movement) => movement.quantityDelta < 0).length), Icon: Boxes, tone: "text-amber-600 dark:text-amber-400" },
+                ].map(({ label, value, Icon, tone }) => <div key={label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-3.5 py-3"><span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted/70", tone)}><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 truncate text-lg font-bold tabular-nums">{value}</p></div></div>)}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div><CardTitle className="text-base">{t.recipes.movementHistory}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{t.recipes.movementHistoryHint}</p></div>
+                  <div className="relative w-full md:max-w-sm"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={movementSearch} onChange={(event) => setMovementSearch(event.target.value)} placeholder={t.recipes.searchMaterials} aria-label={t.recipes.searchMaterials} className="ps-11" /></div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {visibleMovements.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{t.recipes.noMovements}</p> : <div className="max-h-[520px] overflow-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead className="sticky top-0 border-y border-border bg-card text-xs text-muted-foreground"><tr><th className="px-4 py-3 text-start font-medium">{t.expenses.date}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.stockIn}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.stockOut}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.reason}</th><th className="px-4 py-3 text-start font-medium">{t.purchases.employee}</th></tr></thead>
+                    <tbody>{visibleMovements.map((movement) => {
+                      const item = inventoryItems.find((candidate) => candidate.id === movement.inventoryItemId);
+                      const name = movement.itemName ? bilingual(movement.itemName, locale) : item ? bilingual(item.name, locale) : t.inventory.unknownItem;
+                      const reason = t.inventory.reasons[movement.reason];
+                      return <tr key={movement.id} className="border-b border-border/60 last:border-0"><td className="px-4 py-3 text-muted-foreground">{new Date(movement.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-US")}</td><td className="px-4 py-3 font-medium">{name}</td><td className="px-4 py-3 text-end tabular-nums text-success">{movement.quantityDelta > 0 ? `+${formatNumber(movement.quantityDelta, 0, 3)} ${item?.unit ?? t.inventory.pieceUnit}` : "—"}</td><td className="px-4 py-3 text-end tabular-nums text-destructive">{movement.quantityDelta < 0 ? `${formatNumber(Math.abs(movement.quantityDelta), 0, 3)} ${item?.unit ?? t.inventory.pieceUnit}` : "—"}</td><td className="px-4 py-3">{reason}</td><td className="px-4 py-3 text-muted-foreground">{movement.employeeName}{movement.orderId && <p className="mt-0.5 text-xs">{t.orders.orderNumber} #{movement.orderId.slice(0, 8)}</p>}</td></tr>;
+                    })}</tbody>
+                  </table>
+                </div>}
               </CardContent>
             </Card>
           </div>
@@ -374,8 +601,6 @@ export default function RecipesPage() {
         hasPrev={editingIndex !== null && editingIndex > 0}
         hasNext={editingIndex !== null && editingIndex < rows.length - 1}
       />
-      <ReceiveStockDialog item={selectedInventoryItem} open={receiveOpen} onOpenChange={setReceiveOpen} />
-      <AdjustStockDialog item={selectedInventoryItem} open={adjustOpen} onOpenChange={setAdjustOpen} />
     </AppShell>
   );
 }

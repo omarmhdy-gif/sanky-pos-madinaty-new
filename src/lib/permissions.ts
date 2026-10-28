@@ -9,7 +9,6 @@ import {
   CookingPot,
   Landmark,
   UsersRound,
-  MonitorCog,
   CalendarCheck2,
   WalletCards,
   ContactRound,
@@ -50,7 +49,6 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/hr", icon: BriefcaseBusiness, key: "hr", roles: ["owner"] },
   { href: "/customers", icon: ContactRound, key: "customers", roles: ["owner", "cashier"], permissions: ["customers"] },
   { href: "/settings", icon: SlidersHorizontal, key: "settings", roles: ["owner", "cashier"], permissions: ["settings"] },
-  { href: "/devices", icon: MonitorCog, key: "devices", roles: ["owner"] },
 ];
 
 // Backward-compat fallback for any staff row whose `permissions` is still
@@ -87,6 +85,9 @@ export function hasPermission(user: Pick<StaffUser, "role" | "permissions"> | nu
 }
 
 export function canAccess(user: Pick<StaffUser, "role" | "permissions">, pathname: string): boolean {
+  // Device tools now live under Settings. Keep the old route available to
+  // owners for bookmarks, without advertising it as a separate module.
+  if (pathname === "/devices") return user.role === "owner";
   const item = NAV_ITEMS.find((i) => i.href === pathname);
   if (!item) return true; // not a gated route (e.g. login, branch-select)
   if (!item.roles.includes(user.role)) return false;

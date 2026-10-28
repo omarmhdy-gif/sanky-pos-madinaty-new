@@ -23,7 +23,7 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
   const [desktopSessionChecked, setDesktopSessionChecked] = useState(false);
   const [desktopDeviceSessionValid, setDesktopDeviceSessionValid] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const logout = useAuthStore((s) => s.logout);
+  const clearLocalAuth = useAuthStore((s) => s.clearLocalAuth);
   const fetchBranches = useBranchStore((s) => s.fetchBranches);
   const branchesLoaded = useBranchStore((s) => s.loaded);
   const branchesError = useBranchStore((s) => s.error);
@@ -40,6 +40,20 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
     setDesktopMode(isDesktop);
 
     let active = true;
+    // A stale or refreshing Supabase session can leave getSession() pending
+    // (for example when the browser cannot reach Supabase). Never hold the
+    // entire app on the brand splash forever: after the timeout, let the
+    // route render so AuthGuard can take web users to login, or desktop users
+    // to device activation. If the session resolves later, normal checks run.
+    const authInitializationTimeout = window.setTimeout(() => {
+      if (!active) return;
+      setHasAuthSession(false);
+      setDesktopDeviceSessionValid(false);
+      setDesktopSessionChecked(true);
+      clearLocalAuth();
+      setAuthReady(true);
+    }, 10000);
+
     const checkDeviceSession = async (session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"]) => {
       setHasAuthSession(Boolean(session));
       if (!isDesktop) return;
@@ -67,7 +81,7 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
       void checkDeviceSession(session);
       if (event === "SIGNED_OUT") {
         clearShopAccountNumber();
-        logout();
+        clearLocalAuth();
       }
       if (
         event === "PASSWORD_RECOVERY" &&
@@ -89,18 +103,28 @@ export function DataBootstrap({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
+      window.clearTimeout(authInitializationTimeout);
       void checkDeviceSession(data.session);
       if (!data.session) {
         clearShopAccountNumber();
-        logout();
+        clearLocalAuth();
       }
       setAuthReady(true);
+    }).catch(() => {
+      if (!active) return;
+      window.clearTimeout(authInitializationTimeout);
+      setHasAuthSession(false);
+      setDesktopDeviceSessionValid(false);
+      setDesktopSessionChecked(true);
+      setAuthReady(true);
+      clearLocalAuth();
     });
     return () => {
       active = false;
+      window.clearTimeout(authInitializationTimeout);
       authListener.subscription.unsubscribe();
     };
-  }, [logout]);
+  }, [clearLocalAuth]);
 
   // Don't load branch lists before authentication. This also makes the first
   // Electron launch land on the activation form instead of an anonymous sync.

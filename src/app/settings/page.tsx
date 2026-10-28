@@ -1,35 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sun, Moon, Download, Upload, FileSpreadsheet, Trash2, Tag, Plus, Search } from "lucide-react";
+import { Upload, Trash2, Tag, Plus, Search, SlidersHorizontal, ReceiptText, Store, CreditCard, MonitorCog, ChevronDown } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopLogo } from "@/components/layout/ShopLogo";
 import { makeLogoBackgroundTransparent } from "@/lib/branding/transparentLogo";
 import { MenuQrManager } from "@/components/settings/MenuQrManager";
-import { ExternalPaymentManager } from "@/components/settings/ExternalPaymentManager";
+import { PaymentMethodsManager } from "@/components/settings/ExternalPaymentManager";
+import { CashierDeviceManager } from "@/components/settings/CashierDeviceManager";
 import { TableManager } from "@/components/settings/TableManager";
+import { ReceiptView } from "@/components/pos/ReceiptView";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogCancel,
-  AlertDialogAction,
-} from "@/components/ui/alert-dialog";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
-import { useSystemLogStore } from "@/lib/store/useSystemLogStore";
-import { usePrintQueueStore } from "@/lib/store/usePrintQueueStore";
-import { useOrderQueueStore } from "@/lib/store/useOrderQueueStore";
 import { useI18n } from "@/lib/i18n";
-import { useTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import {
@@ -41,17 +29,9 @@ import {
   deletePromoCode,
   searchCustomers,
 } from "@/lib/supabase/api";
-import { exportAllToCsv } from "@/lib/export";
-import { APP_VERSION, BUILD_LABEL } from "@/lib/version";
-import type { Customer, LoyaltySettings, MultiPricingSettings, PromoCode } from "@/lib/types";
+import type { Customer, LoyaltySettings, Order, PromoCode } from "@/lib/types";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
-
-const DEFAULT_MULTI_PRICING: MultiPricingSettings = {
-  enabled: false,
-  primaryLabel: { en: "Primary Price", ar: "السعر الأساسي" },
-  secondaryLabel: { en: "Second Price", ar: "السعر الثاني" },
-};
 
 const DEFAULT_LOYALTY_SETTINGS: LoyaltySettings = {
   branchId: "",
@@ -68,25 +48,39 @@ const DEFAULT_LOYALTY_SETTINGS: LoyaltySettings = {
   updatedAt: "",
 };
 
+const SAMPLE_RECEIPT_ORDER: Order = {
+  id: "settings-preview",
+  branchId: "",
+  orderNumber: 1,
+  lines: [
+    { lineId: "sample-line", productId: "sample-product", name: { en: "Sample Item", ar: "صنف تجريبي" }, unitPrice: 50, qty: 1, modifiers: [] },
+  ],
+  subtotal: 50,
+  discountAmount: 0,
+  taxAmount: 0,
+  taxRate: 0,
+  total: 50,
+  payment: { method: "cash", amount: 50, tenderedAmount: 50, changeDue: 0 },
+  status: "completed",
+  type: "takeaway",
+  cashierId: "preview",
+  cashierName: "",
+  createdAt: new Date().toISOString(),
+};
+
 export default function SettingsPage() {
-  const { t, locale, setLocale } = useI18n();
-  const { theme, setTheme } = useTheme();
+  const { t, locale } = useI18n();
 
   const settings = useDataStore((s) => s.settings);
   const updateSettings = useDataStore((s) => s.updateSettings);
 
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
-
-  const clearSystemLog = useSystemLogStore((s) => s.clear);
-  const clearPrintQueue = usePrintQueueStore((s) => s.clear);
-  const clearOrderQueue = useOrderQueueStore((s) => s.clear);
-  const pendingOfflineOrders = useOrderQueueStore((s) => s.queue.length);
-
-  const multiPricing = settings.multiPricing ?? DEFAULT_MULTI_PRICING;
+  const [activeSection, setActiveSection] = useState<"shop" | "receipt" | "business" | "payments">("shop");
+  const [showCashierDevices, setShowCashierDevices] = useState(false);
+  const [showLoyaltySettings, setShowLoyaltySettings] = useState(false);
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [resetLocalOpen, setResetLocalOpen] = useState(false);
 
   // Loyalty
   const [loyaltySettings, setLoyaltySettings] =
@@ -236,14 +230,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleResetLocalData = () => {
-    clearSystemLog();
-    clearPrintQueue();
-    clearOrderQueue();
-    setResetLocalOpen(false);
-    toast(t.settings.resetLocalDataDone, "success");
-  };
-
   const handleLogoChange = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -270,44 +256,13 @@ export default function SettingsPage() {
     }
   };
 
-  const handleExportData = () => {
-    const state = useDataStore.getState();
-
-    const blob = new Blob(
-      [JSON.stringify(state, null, 2)],
-      { type: "application/json" }
-    );
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-
-    a.href = url;
-    a.download = "sanky-pos-data-export.json";
-    a.click();
-
-    URL.revokeObjectURL(url);
-  };
-
-  const [exportingCsv, setExportingCsv] = useState(false);
-
-  const handleExportCsv = async () => {
-    setExportingCsv(true);
-
-    try {
-      const count = await exportAllToCsv(useDataStore.getState());
-
-      toast(
-        count > 0
-          ? `${t.settings.csvExported} (${count})`
-          : t.settings.nothingToExport,
-        count > 0 ? "success" : "info"
-      );
-    } finally {
-      setExportingCsv(false);
-    }
-  };
-
   const isArabic = locale === "ar";
+  const sections = [
+    { id: "shop" as const, label: isArabic ? "المحل والطاولات" : "Shop & tables", description: isArabic ? "تقسيمات الطعام وبيانات المحل" : "Dining areas and shop details", Icon: Store },
+    { id: "receipt" as const, label: isArabic ? "الإيصال" : "Receipt", description: isArabic ? "بيانات الإيصال ومعاينة شكله" : "Receipt details and a live preview", Icon: ReceiptText },
+    { id: "business" as const, label: isArabic ? "البيزنس والعملاء" : "Business tools", description: isArabic ? "قائمة QR والخصومات والولاء" : "QR menu, promotions and loyalty", Icon: SlidersHorizontal },
+    { id: "payments" as const, label: isArabic ? "طرق الدفع" : "Payment methods", description: isArabic ? "إدارة طرق الدفع المتاحة للكاشير" : "Manage payment options available at checkout", Icon: CreditCard },
+  ];
 
   return (
     <AppShell title={t.settings.title}>
@@ -317,6 +272,33 @@ export default function SettingsPage() {
           {t.settings.subtitle}
         </p>
 
+        <nav role="tablist" aria-label={isArabic ? "أقسام الإعدادات" : "Settings sections"} className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {sections.map(({ id, label, description, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={activeSection === id}
+              onClick={() => setActiveSection(id)}
+              className={cn(
+                "flex min-h-24 items-start gap-3 rounded-2xl border p-4 text-start transition-all",
+                activeSection === id
+                  ? "border-primary/60 bg-primary/10 shadow-sm ring-1 ring-primary/30"
+                  : "border-border bg-card hover:border-primary/40 hover:bg-muted/60"
+              )}
+            >
+              <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", activeSection === id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                <Icon className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">{label}</span>
+                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span>
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        <div hidden={activeSection !== "shop"} className="space-y-5">
         <TableManager />
 
         {/* General */}
@@ -429,8 +411,31 @@ export default function SettingsPage() {
             )}
           </CardContent>
         </Card>
+        </div>
 
+        <div hidden={activeSection !== "business"} className="space-y-5">
         <MenuQrManager />
+
+        <Card>
+          <CardHeader className="p-0">
+            <button
+              type="button"
+              aria-expanded={showCashierDevices}
+              onClick={() => setShowCashierDevices((open) => !open)}
+              className="flex w-full items-center justify-between gap-3 rounded-xl p-5 text-start transition-colors hover:bg-muted/40"
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"><MonitorCog className="h-5 w-5" /></span>
+                <span>
+                  <span className="block text-base font-semibold">{isArabic ? "تفعيل أجهزة الكاشير" : "Cashier device activation"}</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">{isArabic ? "إنشاء كود ربط جهاز بفرع" : "Issue a code to connect a cashier computer to a branch"}</span>
+                </span>
+              </span>
+              <ChevronDown className={cn("h-5 w-5 shrink-0 text-muted-foreground transition-transform", showCashierDevices && "rotate-180")} />
+            </button>
+          </CardHeader>
+          {showCashierDevices && <CardContent className="pt-0"><CashierDeviceManager /></CardContent>}
+        </Card>
 
         {/* Promo codes */}
         <Card>
@@ -461,13 +466,20 @@ export default function SettingsPage() {
 
         {/* Loyalty */}
         <Card>
-          <CardHeader>
-            <CardTitle>
-              {isArabic ? "برنامج الولاء" : "Loyalty Program"}
-            </CardTitle>
+          <CardHeader className="p-0">
+            <button type="button" aria-expanded={showLoyaltySettings} onClick={() => setShowLoyaltySettings((open) => !open)} className="flex w-full items-center justify-between gap-3 rounded-xl p-5 text-start transition-colors hover:bg-muted/40">
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"><Tag className="h-5 w-5" /></span>
+                <span>
+                  <span className="block text-base font-semibold">{isArabic ? "برنامج الولاء" : "Loyalty Program"}</span>
+                  <span className="mt-1 block text-sm text-muted-foreground">{loyaltyLoading ? (isArabic ? "جاري تحميل الإعدادات" : "Loading settings") : loyaltySettings.enabled ? (isArabic ? "مفعّل" : "Enabled") : (isArabic ? "غير مفعّل" : "Disabled")}</span>
+                </span>
+              </span>
+              <ChevronDown className={cn("h-5 w-5 shrink-0 text-muted-foreground transition-transform", showLoyaltySettings && "rotate-180")} />
+            </button>
           </CardHeader>
 
-          <CardContent className="space-y-5">
+          {showLoyaltySettings && <CardContent className="space-y-5 pt-0">
             {loyaltyLoading ? (
               <p className="text-sm text-muted-foreground">
                 {isArabic
@@ -804,79 +816,39 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
-          </CardContent>
+          </CardContent>}
         </Card>
 
-        {/* Appearance */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.settings.appearance}</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>{t.settings.language}</Label>
-
-              <div className="flex gap-1 rounded-lg bg-muted p-1">
-                <button
-                  onClick={() => setLocale("en")}
-                  className={cn(
-                    "rounded-md px-4 py-1.5 text-sm font-medium",
-                    locale === "en" && "bg-background shadow-sm"
-                  )}
-                >
-                  English
-                </button>
-
-                <button
-                  onClick={() => setLocale("ar")}
-                  className={cn(
-                    "rounded-md px-4 py-1.5 text-sm font-medium",
-                    locale === "ar" && "bg-background shadow-sm"
-                  )}
-                >
-                  العربية
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <Label>{t.settings.theme}</Label>
-
-              <div className="flex gap-1 rounded-lg bg-muted p-1">
-                <button
-                  onClick={() => setTheme("light")}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium",
-                    theme === "light" && "bg-background shadow-sm"
-                  )}
-                >
-                  <Sun className="h-3.5 w-3.5" />
-                  {t.settings.light}
-                </button>
-
-                <button
-                  onClick={() => setTheme("dark")}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium",
-                    theme === "dark" && "bg-background shadow-sm"
-                  )}
-                >
-                  <Moon className="h-3.5 w-3.5" />
-                  {t.settings.dark}
-                </button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        </div>
 
         {/* Receipt */}
+        <div hidden={activeSection !== "receipt"} className="space-y-5">
         <Card>
           <CardHeader>
             <CardTitle>{t.settings.receiptSettings}</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-4">
+            <div>
+              <Label>{isArabic ? "عنوان الإيصال" : "Receipt header"}</Label>
+              <div className="mt-1.5 flex items-center gap-3 rounded-lg border p-3">
+                <ShopLogo className="h-10 w-10 shrink-0 rounded-lg" />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{settings.shopName || (isArabic ? "اسم المحل" : "Shop name")}</p>
+                  <p className="text-xs text-muted-foreground">{isArabic ? "الشعار واسم المحل يظهران أعلى الإيصال" : "The logo and shop name appear at the top of the receipt"}</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>{isArabic ? "العنوان على الإيصال" : "Receipt address"}</Label>
+                <Input className="mt-1.5" value={settings.address ?? ""} onChange={(e) => updateSettings({ address: e.target.value })} />
+              </div>
+              <div>
+                <Label>{isArabic ? "رقم الهاتف على الإيصال" : "Receipt phone"}</Label>
+                <Input className="mt-1.5" value={settings.phone ?? ""} onChange={(e) => updateSettings({ phone: e.target.value })} />
+              </div>
+            </div>
             <div>
               <Label>{t.settings.receiptFooter}</Label>
 
@@ -893,196 +865,42 @@ export default function SettingsPage() {
                 }
               />
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Multi Pricing */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.settings.multiPricing}</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border border-border p-3">
-              <div>
-                <Label>{t.settings.multiPricingEnable}</Label>
-
-                <p className="text-xs text-muted-foreground">
-                  {t.settings.multiPricingDesc}
-                </p>
-              </div>
-
-              <Switch
-                checked={multiPricing.enabled}
-                onCheckedChange={(v) =>
-                  updateSettings({
-                    multiPricing: {
-                      ...multiPricing,
-                      enabled: v,
-                    },
-                  })
-                }
+            <div>
+              <Label>{isArabic ? "نص أسفل الإيصال (عربي)" : "Receipt footer (Arabic)"}</Label>
+              <Input
+                dir="rtl"
+                className="mt-1.5"
+                value={settings.receiptFooter?.ar ?? ""}
+                onChange={(e) => updateSettings({
+                  receiptFooter: {
+                    en: settings.receiptFooter?.en ?? "",
+                    ar: e.target.value,
+                  },
+                })}
               />
             </div>
-
-            {multiPricing.enabled && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label>{t.settings.multiPricingPrimaryLabel}</Label>
-
-                  <Input
-                    className="mt-1.5"
-                    value={multiPricing.primaryLabel.en}
-                    onChange={(e) =>
-                      updateSettings({
-                        multiPricing: {
-                          ...multiPricing,
-                          primaryLabel: {
-                            ...multiPricing.primaryLabel,
-                            en: e.target.value,
-                          },
-                        },
-                      })
-                    }
-                  />
-                </div>
-
-                <div>
-                  <Label>{t.settings.multiPricingSecondaryLabel}</Label>
-
-                  <Input
-                    className="mt-1.5"
-                    value={multiPricing.secondaryLabel.en}
-                    onChange={(e) =>
-                      updateSettings({
-                        multiPricing: {
-                          ...multiPricing,
-                          secondaryLabel: {
-                            ...multiPricing.secondaryLabel,
-                            en: e.target.value,
-                          },
-                        },
-                      })
-                    }
-                  />
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 
-        <ExternalPaymentManager />
-
-        {/* Data Management */}
         <Card>
           <CardHeader>
-            <CardTitle>{t.settings.dataManagement}</CardTitle>
+            <CardTitle>{isArabic ? "معاينة الإيصال" : "Receipt preview"}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t.devices.previewLabel}</p>
           </CardHeader>
-
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              {t.settings.backupNote}
-            </p>
-
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              disabled={exportingCsv}
-              onClick={handleExportCsv}
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-
-              {exportingCsv
-                ? t.settings.exporting
-                : t.settings.exportCsvAll}
-            </Button>
-
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={handleExportData}
-            >
-              <Download className="h-4 w-4" />
-              {t.settings.exportData}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Reset Local Data */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{t.settings.resetLocalData}</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              {t.settings.resetLocalDataDesc}
-            </p>
-
-            <Button
-              variant="outline"
-              className="w-full justify-start text-destructive hover:text-destructive"
-              onClick={() => setResetLocalOpen(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-              {t.settings.resetLocalData}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Version */}
-        <Card>
-          <CardContent className="flex items-center justify-between py-4">
-            <div>
-              <p className="text-sm font-semibold">{t.app.name}</p>
-
-              <p className="text-xs text-muted-foreground">
-                {t.settings.version} {APP_VERSION}
-              </p>
+          <CardContent>
+            <div className="mx-auto flex max-w-2xl justify-center rounded-xl border bg-muted/40 p-5 shadow-inner sm:p-8">
+              <ReceiptView order={SAMPLE_RECEIPT_ORDER} preview />
             </div>
-
-            <span className="rounded-full border border-success/30 bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-              {BUILD_LABEL}
-            </span>
           </CardContent>
         </Card>
+        </div>
+
+        <div hidden={activeSection !== "payments"} className="space-y-5">
+          <PaymentMethodsManager />
+        </div>
+
       </div>
 
-      <AlertDialog
-        open={resetLocalOpen}
-        onOpenChange={setResetLocalOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t.settings.resetLocalDataConfirmTitle}
-            </AlertDialogTitle>
-
-            <AlertDialogDescription>
-              {t.settings.resetLocalDataConfirmDesc}
-
-              {pendingOfflineOrders > 0 && (
-                <span className="mt-2 block font-semibold text-destructive">
-                  Warning: {pendingOfflineOrders} order
-                  {pendingOfflineOrders > 1 ? "s" : ""} on this device{" "}
-                  {pendingOfflineOrders > 1 ? "are" : "is"} still waiting
-                  to sync and will be permanently lost.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-              {t.common.cancel}
-            </AlertDialogCancel>
-
-            <AlertDialogAction onClick={handleResetLocalData}>
-              {t.common.delete}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </AppShell>
   );
 }

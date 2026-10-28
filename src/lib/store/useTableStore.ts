@@ -15,9 +15,12 @@ export interface DiningTable {
   name: string;
   seats: number;
   position: number;
-  /** Optional floor-plan grid coordinates. Old layouts fall back to `position`. */
+  /** Legacy grid coordinates kept for older clients and cached layouts. */
   positionX?: number;
   positionY?: number;
+  /** Saved freeform floor-plan coordinates as percentages of the canvas. */
+  positionXPercent?: number;
+  positionYPercent?: number;
 }
 
 export interface TableOrderDraft {
