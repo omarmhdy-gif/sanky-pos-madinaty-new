@@ -13,7 +13,7 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, formatNumber, formatDateTime, cn } from "@/lib/utils";
-import { recipeCost } from "@/lib/inventory";
+import { inventoryItemUnitCost, recipeCost } from "@/lib/inventory";
 import { dateRangeForFilter, isTalabatOrder, type DateFilterKey } from "@/lib/analytics";
 import { hasPermission } from "@/lib/permissions";
 import { externalPaymentLabel, externalPaymentMethodById, externalPaymentMethods } from "@/lib/externalPayment";
@@ -267,7 +267,7 @@ export default function OrdersPage() {
           cost: 0,
         };
         existing.quantity += quantity;
-        existing.cost += quantity * (item?.lastPurchaseCost ?? 0);
+        existing.cost += quantity * inventoryItemUnitCost(item, inventoryItems);
         usage.set(ingredient.inventoryItemId, existing);
       });
     });
