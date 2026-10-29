@@ -2,7 +2,7 @@
 
 import type { InventoryItem, Locale } from "@/lib/types";
 import { bilingual, useI18n } from "@/lib/i18n";
-import { stockLevel, STOCK_LEVEL_DOT } from "@/lib/inventory";
+import { inventoryItemUnitCost, stockLevel, STOCK_LEVEL_DOT } from "@/lib/inventory";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { cn, formatMoney, formatNumber } from "@/lib/utils";
 
@@ -19,7 +19,9 @@ export function InventoryRow({
 }) {
   const { t } = useI18n();
   const settings = useDataStore((s) => s.settings);
+  const inventoryItems = useDataStore((s) => s.inventoryItems);
   const level = stockLevel(item);
+  const unitCost = inventoryItemUnitCost(item, inventoryItems);
   return (
     <div className="flex items-center justify-between gap-3 p-3.5">
       <div className="flex min-w-0 items-center gap-3">
@@ -29,9 +31,10 @@ export function InventoryRow({
           <p className="text-xs text-muted-foreground">
             {formatNumber(item.quantity, 0, 3)} {item.unit ?? "pc"}
           </p>
-          {showCost && item.lastPurchaseCost != null && (
+          <p className="text-[11px] text-muted-foreground">{(item.sourcingType ?? "purchased") === "manufactured" ? t.inventory.manufactured : t.inventory.purchased}</p>
+          {showCost && unitCost > 0 && (
             <p className="text-xs text-muted-foreground">
-              {t.inventory.lastPurchaseCost}: {formatMoney(item.lastPurchaseCost * (item.conversionFactor ?? 1), settings.currencySymbol)} / {item.purchaseUnit ?? item.unit ?? "pc"}
+              {item.sourcingType === "manufactured" ? t.inventory.estimatedUnitCost : t.inventory.lastPurchaseCost}: {formatMoney(item.sourcingType === "manufactured" ? unitCost : unitCost * (item.conversionFactor ?? 1), settings.currencySymbol)} / {item.sourcingType === "manufactured" ? item.unit ?? t.inventory.pieceUnit : item.purchaseUnit ?? item.unit ?? "pc"}
             </p>
           )}
         </div>

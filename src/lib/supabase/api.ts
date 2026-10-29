@@ -623,6 +623,24 @@ export async function setInventoryOpeningBalance(input: {
   return data;
 }
 
+/** Manufactures one inventory item and consumes its components atomically. */
+export async function manufactureInventoryItem(input: {
+  branchId: string;
+  inventoryItemId: string;
+  quantity: number;
+  employeeId?: string;
+  employeeName: string;
+}): Promise<{ inventoryUpdates: { id: string; quantity: number }[]; stockMovementUpdates: StockMovement[] }> {
+  const res = await supabase.rpc("manufacture_inventory_item", {
+    p_branch_id: input.branchId,
+    p_inventory_item_id: input.inventoryItemId,
+    p_quantity: input.quantity,
+    p_employee_id: input.employeeId ?? null,
+    p_employee_name: input.employeeName,
+  });
+  return unwrap(res) as unknown as { inventoryUpdates: { id: string; quantity: number }[]; stockMovementUpdates: StockMovement[] };
+}
+
 /** Deletes a purchase — removes it from purchase history and (since Finance
  * totals are summed live from `purchases`) from Finance totals. Deliberately
  * does NOT touch inventory quantities or last purchase price. Owner-only —
@@ -850,18 +868,23 @@ export async function updateLoyaltySettings(
 
 export async function createOrder(
   order: Omit<Order, "id" | "orderNumber" | "lines"> & { lines: CartLine[] }
-): Promise<Order & { inventoryUpdates: { id: string; quantity: number }[] }> {
+): Promise<Order & { inventoryUpdates: { id: string; quantity: number }[]; stockMovementUpdates: StockMovement[] }> {
   const { lines, ...orderFields } = order;
   const res = await supabase.rpc("create_order", {
     p_order: orderFields,
     p_lines: lines,
   });
-  const created = unwrap(res) as unknown as Order & { inventoryUpdates: { id: string; quantity: number }[] };
+  const created = unwrap(res) as unknown as Order & { inventoryUpdates: { id: string; quantity: number }[]; stockMovementUpdates: StockMovement[] };
   if (order.promoCode) {
     const { error } = await supabase.from("orders").update({ promo_code: order.promoCode }).eq("id", created.id);
     if (error) console.error("Order completed, but saving its promo code failed:", error.message);
   }
-  return { ...created, promoCode: order.promoCode };
+  return {
+    ...created,
+    inventoryUpdates: created.inventoryUpdates ?? [],
+    stockMovementUpdates: created.stockMovementUpdates ?? [],
+    promoCode: order.promoCode,
+  };
 }
 
 export async function voidOrder(id: string): Promise<void> {

@@ -75,6 +75,7 @@ interface DataStore extends AppData {
   updateInventoryItem: (id: string, patch: Partial<InventoryItem>) => Promise<boolean>;
   deleteInventoryItem: (id: string) => Promise<void>;
   receiveStock: (itemId: string, qty: number, unitCost: number, supplier?: string) => Promise<boolean>;
+  manufactureInventoryItem: (itemId: string, qty: number) => Promise<boolean>;
   setOpeningBalance: (itemId: string, purchaseQty: number, purchaseUnitCost: number) => Promise<boolean>;
   adjustStock: (itemId: string, delta: number, reason: "waste" | "stock_count") => Promise<boolean>;
   recordInventoryQualityCheck: (input: Omit<InventoryQualityCheck, "id" | "branchId" | "checkedAt">) => Promise<void>;
@@ -348,6 +349,29 @@ export const useDataStore = create<DataStore>()((set, get) => ({
       return false;
     }
   },
+  manufactureInventoryItem: async (itemId, qty) => {
+    try {
+      const { employeeId, employeeName } = currentEmployee();
+      const result = await api.manufactureInventoryItem({
+        branchId: requireBranchId(),
+        inventoryItemId: itemId,
+        quantity: qty,
+        employeeId,
+        employeeName,
+      });
+      set((state) => ({
+        inventoryItems: state.inventoryItems.map((item) => {
+          const update = result.inventoryUpdates.find((entry) => entry.id === item.id);
+          return update ? { ...item, quantity: update.quantity } : item;
+        }),
+        stockMovements: [...result.stockMovementUpdates, ...state.stockMovements.filter((movement) => !result.stockMovementUpdates.some((added) => added.id === movement.id))],
+      }));
+      return true;
+    } catch (err) {
+      toast(errorMessage(err, "Failed to manufacture inventory item"), "error");
+      return false;
+    }
+  },
   setOpeningBalance: async (itemId, purchaseQty, purchaseUnitCost) => {
     try {
       const { employeeId, employeeName } = currentEmployee();
@@ -474,13 +498,14 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   addOrder: async (o, branchIdOverride) => {
-    const { inventoryUpdates, ...created } = await api.createOrder({ ...o, branchId: branchIdOverride ?? requireBranchId() });
+    const { inventoryUpdates, stockMovementUpdates, ...created } = await api.createOrder({ ...o, branchId: branchIdOverride ?? requireBranchId() });
     set((state) => ({
       orders: [created, ...state.orders],
       inventoryItems: state.inventoryItems.map((item) => {
         const update = inventoryUpdates.find((u) => u.id === item.id);
         return update ? { ...item, quantity: update.quantity } : item;
       }),
+      stockMovements: [...stockMovementUpdates, ...state.stockMovements.filter((movement) => !stockMovementUpdates.some((added) => added.id === movement.id))],
     }));
     return created;
   },

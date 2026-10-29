@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, formatNumber, cn } from "@/lib/utils";
-import { recipeCost, estimatedProfit, estimatedMargin } from "@/lib/inventory";
+import { inventoryItemUnitCost, recipeCost, estimatedProfit, estimatedMargin } from "@/lib/inventory";
 import { dateRangeForFilter, ordersInDateRange, type DateFilterKey } from "@/lib/analytics";
 import { toast } from "@/components/ui/toast";
 import type { RecipeIngredient } from "@/lib/types";
@@ -124,7 +124,7 @@ export default function RecipesPage() {
   const inventoryStats = useMemo(() => ({
     itemCount: inventoryItems.length,
     lowStock: inventoryItems.filter((item) => item.criticalThreshold !== undefined && item.quantity <= item.criticalThreshold).length,
-    inventoryValue: inventoryItems.reduce((sum, item) => sum + item.quantity * (item.lastPurchaseCost ?? 0), 0),
+    inventoryValue: inventoryItems.reduce((sum, item) => sum + item.quantity * inventoryItemUnitCost(item, inventoryItems), 0),
   }), [inventoryItems]);
 
   const movementStats = useMemo(() => ({
@@ -169,7 +169,7 @@ export default function RecipesPage() {
         recipeQty: ingredient.qty,
         soldQty,
         consumedQty,
-        cost: consumedQty * (item.lastPurchaseCost ?? 0),
+        cost: consumedQty * inventoryItemUnitCost(item, inventoryItems),
       }];
     }));
   }, [products, inventoryItems, orders, consumptionDateRange, consumptionDateFilter]);
@@ -510,8 +510,8 @@ export default function RecipesPage() {
                         return <tr key={item.id} className="border-b border-border/60 last:border-0">
                           <td className="px-4 py-3"><p className="font-medium">{bilingual(item.name, locale)}</p>{item.purchaseUnit && item.type === "measured" && <p className="mt-0.5 text-xs text-muted-foreground">{t.recipes.purchaseUnit}: {item.purchaseUnit} · 1 {item.purchaseUnit} = {formatNumber(item.conversionFactor ?? 1)} {item.unit ?? t.inventory.pieceUnit}</p>}</td>
                           <td className="px-4 py-3 text-end tabular-nums"><span className={cn("font-semibold", isLow && "text-amber-700 dark:text-amber-300")}>{formatNumber(item.quantity, 0, 3)} {item.unit ?? t.inventory.pieceUnit}</span>{isLow && <span className="ms-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">{t.recipes.lowStockBadge}</span>}</td>
-                          <td className="px-4 py-3 text-end tabular-nums">{formatMoney(item.lastPurchaseCost ?? 0, settings.currencySymbol)}<p className="text-xs text-muted-foreground">/ {item.unit ?? t.inventory.pieceUnit}</p></td>
-                          <td className="px-4 py-3 text-end font-semibold tabular-nums">{formatMoney(item.quantity * (item.lastPurchaseCost ?? 0), settings.currencySymbol)}</td>
+                          <td className="px-4 py-3 text-end tabular-nums">{formatMoney(inventoryItemUnitCost(item, inventoryItems), settings.currencySymbol)}<p className="text-xs text-muted-foreground">/ {item.unit ?? t.inventory.pieceUnit}</p></td>
+                          <td className="px-4 py-3 text-end font-semibold tabular-nums">{formatMoney(item.quantity * inventoryItemUnitCost(item, inventoryItems), settings.currencySymbol)}</td>
                           <td className="px-4 py-3">{latestPurchase ? <><p className="font-medium">{new Date(latestPurchase.createdAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US")}</p><p className="mt-0.5 text-xs text-muted-foreground">{formatNumber(latestPurchase.purchaseQuantity ?? latestPurchase.quantity, 0, 3)} {purchaseUnit} · {t.recipes.purchaseTotal}: {formatMoney(latestPurchase.totalCost, settings.currencySymbol)}</p><p className="text-xs text-muted-foreground">{latestPurchase.supplier || latestPurchase.employeeName || "—"}</p></> : <span className="text-muted-foreground">{t.recipes.noPurchase}</span>}</td>
                         </tr>;
                       })}</tbody>
@@ -597,6 +597,7 @@ export default function RecipesPage() {
         product={editing}
         open={formOpen}
         onOpenChange={setFormOpen}
+        mode="recipe"
         onNavigate={handleNavigate}
         hasPrev={editingIndex !== null && editingIndex > 0}
         hasNext={editingIndex !== null && editingIndex < rows.length - 1}

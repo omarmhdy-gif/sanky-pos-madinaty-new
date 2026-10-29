@@ -10,6 +10,7 @@ import {
   Search,
   FileDown,
   Upload,
+  Factory,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import * as XLSX from "xlsx";
@@ -35,14 +36,15 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { InventoryRow } from "@/components/inventory/InventoryRow";
 import { InventoryItemFormDialog } from "@/components/inventory/InventoryItemFormDialog";
+import { ManufactureInventoryDialog } from "@/components/inventory/ManufactureInventoryDialog";
 import { AdjustStockDialog } from "@/components/inventory/AdjustStockDialog";
 import { ReceiveStockDialog } from "@/components/inventory/ReceiveStockDialog";
 import { Input } from "@/components/ui/input";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n, bilingual } from "@/lib/i18n";
-import { formatDateTime, formatNumber, cn } from "@/lib/utils";
-import { stockLevel, type StockLevel } from "@/lib/inventory";
+import { formatDateTime, formatMoney, formatNumber, cn } from "@/lib/utils";
+import { inventoryItemUnitCost, stockLevel, type StockLevel } from "@/lib/inventory";
 import { supabase } from "@/lib/supabase/client";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import type {
@@ -75,6 +77,7 @@ export default function InventoryPage() {
   const items = useDataStore((s) => s.inventoryItems);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const movements = useDataStore((s) => s.stockMovements);
+  const settings = useDataStore((s) => s.settings);
 
   const addInventoryItem = useDataStore(
     (s) => s.addInventoryItem
@@ -103,6 +106,7 @@ export default function InventoryPage() {
     useState<InventoryItem | null>(null);
   const [receiving, setReceiving] =
     useState<InventoryItem | null>(null);
+  const [manufacturing, setManufacturing] = useState<InventoryItem | null>(null);
   const [deleteTarget, setDeleteTarget] =
     useState<InventoryItem | null>(null);
 
@@ -856,16 +860,19 @@ export default function InventoryPage() {
             locale={locale}
             showCost={isOwner}
           >
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                setReceiving(item)
-              }
-            >
-              <PackagePlus className="h-3.5 w-3.5" />
-              {t.receiveStock.receiveButton}
-            </Button>
+            {(item.sourcingType ?? "purchased") === "purchased" ? (
+              <Button variant="outline" size="sm" onClick={() => setReceiving(item)}>
+                <PackagePlus className="h-3.5 w-3.5" />{t.receiveStock.receiveButton}
+              </Button>
+            ) : item.manufacturingRecipe?.length ? (
+              <Button variant="outline" size="sm" onClick={() => setManufacturing(item)}>
+                <Factory className="h-3.5 w-3.5" />{t.inventory.manufacture}
+              </Button>
+            ) : isOwner ? (
+              <Button variant="outline" size="sm" onClick={() => { setEditing(item); setFormOpen(true); }}>
+                <Pencil className="h-3.5 w-3.5" />{t.inventory.configureManufacturingRecipe}
+              </Button>
+            ) : null}
 
             {isOwner && (
               <>
@@ -985,6 +992,40 @@ export default function InventoryPage() {
     </div>
   );
 
+  const manufacturingList = (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {sorted.filter((item) => item.sourcingType === "manufactured").length === 0 ? (
+        <p className="rounded-xl border border-border p-6 text-center text-sm text-muted-foreground lg:col-span-2">{t.inventory.noManufacturingItems}</p>
+      ) : sorted.filter((item) => item.sourcingType === "manufactured").map((item) => {
+        const recipe = item.manufacturingRecipe ?? [];
+        const unitCost = inventoryItemUnitCost(item, items);
+        return (
+          <article key={item.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate font-semibold">{bilingual(item.name, locale)}</h3>
+                <p className="mt-1 text-xs text-muted-foreground">{recipe.length ? `${recipe.length} ${t.inventory.requiredComponents.toLowerCase()}` : t.inventory.noManufacturingRecipe}</p>
+              </div>
+              <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium", item.autoManufactureOnSale ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-muted text-muted-foreground")}>
+                {item.autoManufactureOnSale ? t.inventory.autoManufactureOnSale : t.inventory.manufacturing}
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg bg-muted/40 p-3 text-sm">
+              <div><p className="text-xs text-muted-foreground">{t.inventory.currentStock}</p><p className="mt-1 font-semibold tabular-nums">{formatNumber(item.quantity, 0, 3)} {item.unit ?? t.inventory.pieceUnit}</p></div>
+              <div><p className="text-xs text-muted-foreground">{t.inventory.estimatedUnitCost}</p><p className="mt-1 font-semibold tabular-nums">{formatMoney(unitCost, settings.currencySymbol)} / {item.unit ?? t.inventory.pieceUnit}</p></div>
+            </div>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setEditing(item); setFormOpen(true); }}>
+                <Pencil className="h-3.5 w-3.5" />{recipe.length ? t.inventory.editItem : t.inventory.configureManufacturingRecipe}
+              </Button>
+              {recipe.length > 0 && <Button size="sm" onClick={() => setManufacturing(item)}><Factory className="h-3.5 w-3.5" />{t.inventory.manufacture}</Button>}
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+
   const createdCount =
     importResults.filter(
       (r) => r.status === "created"
@@ -1099,6 +1140,9 @@ export default function InventoryPage() {
               <TabsTrigger value="history">
                 {t.inventory.history}
               </TabsTrigger>
+              <TabsTrigger value="manufacturing">
+                {t.inventory.manufacturing}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="stock">
@@ -1107,6 +1151,9 @@ export default function InventoryPage() {
 
             <TabsContent value="history">
               {historyList}
+            </TabsContent>
+            <TabsContent value="manufacturing">
+              {manufacturingList}
             </TabsContent>
           </Tabs>
         ) : (
@@ -1166,6 +1213,12 @@ export default function InventoryPage() {
         onOpenChange={(v) =>
           !v && setReceiving(null)
         }
+      />
+
+      <ManufactureInventoryDialog
+        item={manufacturing}
+        open={!!manufacturing}
+        onOpenChange={(open) => !open && setManufacturing(null)}
       />
 
       <AlertDialog

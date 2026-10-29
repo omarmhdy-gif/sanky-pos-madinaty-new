@@ -14,6 +14,29 @@ export const STOCK_LEVEL_DOT: Record<StockLevel, string> = {
   good: "bg-success",
 };
 
+function availableInventoryQuantity(
+  item: InventoryItem,
+  inventoryItems: InventoryItem[],
+  visited: Set<string> = new Set(),
+): number {
+  if (
+    item.sourcingType !== "manufactured"
+    || !item.autoManufactureOnSale
+    || !item.manufacturingRecipe?.length
+    || visited.has(item.id)
+  ) return item.quantity;
+
+  const nextVisited = new Set(visited).add(item.id);
+  let producible = Infinity;
+  for (const ingredient of item.manufacturingRecipe) {
+    if (ingredient.qty <= 0) continue;
+    const component = inventoryItems.find((candidate) => candidate.id === ingredient.inventoryItemId);
+    if (!component) return item.quantity;
+    producible = Math.min(producible, availableInventoryQuantity(component, inventoryItems, nextVisited) / ingredient.qty);
+  }
+  return Number.isFinite(producible) ? item.quantity + producible : item.quantity;
+}
+
 /**
  * How many more units of this product can be sold before an ingredient runs
  * out, based on the recipe. Returns null for products with no recipe (i.e.
@@ -26,15 +49,32 @@ export function productAvailableQty(product: Product, inventoryItems: InventoryI
     if (ing.qty <= 0) continue;
     const item = inventoryItems.find((i) => i.id === ing.inventoryItemId);
     if (!item) continue;
-    min = Math.min(min, Math.floor(item.quantity / ing.qty));
+    min = Math.min(min, Math.floor(availableInventoryQuantity(item, inventoryItems) / ing.qty));
   }
   return Number.isFinite(min) ? min : null;
 }
 
-/** Cost contribution of one recipe line, using the ingredient's last purchase price (0 if unknown). */
+/** Current cost for an inventory unit: last purchase price, or its manufacturing recipe cost if never purchased. */
+export function inventoryItemUnitCost(
+  item: InventoryItem | undefined,
+  inventoryItems: InventoryItem[],
+  visited: Set<string> = new Set(),
+): number {
+  if (!item) return 0;
+  if (item.sourcingType !== "manufactured") return item.lastPurchaseCost ?? 0;
+  if (!item.manufacturingRecipe?.length || visited.has(item.id)) return 0;
+
+  const nextVisited = new Set(visited).add(item.id);
+  return item.manufacturingRecipe.reduce((sum, ingredient) => {
+    const component = inventoryItems.find((candidate) => candidate.id === ingredient.inventoryItemId);
+    return sum + ingredient.qty * inventoryItemUnitCost(component, inventoryItems, nextVisited);
+  }, 0);
+}
+
+/** Cost contribution of one recipe line, using its current purchase or manufacturing cost (0 if unknown). */
 export function ingredientCost(ing: RecipeIngredient, inventoryItems: InventoryItem[]): number {
   const item = inventoryItems.find((i) => i.id === ing.inventoryItemId);
-  return ing.qty * (item?.lastPurchaseCost ?? 0);
+  return ing.qty * inventoryItemUnitCost(item, inventoryItems);
 }
 
 /** Total recipe cost — always computed live from current last purchase prices, never cached. */

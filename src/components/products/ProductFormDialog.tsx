@@ -10,6 +10,11 @@ import {
   Plus,
   Copy,
   ClipboardPaste,
+  Boxes,
+  ChefHat,
+  CheckCircle2,
+  CircleAlert,
+  Package,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,8 +38,9 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { toast } from "@/components/ui/toast";
-import { formatMoney, isImageUrl } from "@/lib/utils";
+import { formatMoney, formatNumber, isImageUrl } from "@/lib/utils";
 import {
+  inventoryItemUnitCost,
   ingredientCost,
   recipeCategoryBucket,
   defaultCoffeeRecipe,
@@ -77,6 +83,7 @@ export function ProductFormDialog({
   product,
   open,
   onOpenChange,
+  mode = "product",
   onNavigate,
   hasPrev,
   hasNext,
@@ -85,6 +92,7 @@ export function ProductFormDialog({
   product: Product | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  mode?: "product" | "recipe";
   onNavigate?: (direction: "prev" | "next") => void;
   hasPrev?: boolean;
   hasNext?: boolean;
@@ -481,16 +489,54 @@ export function ProductFormDialog({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className={mode === "recipe" ? "max-w-4xl gap-0 overflow-hidden p-0" : "max-w-2xl"}>
+        <DialogHeader className={mode === "recipe" ? "border-b border-border bg-card px-5 py-4 sm:px-6" : undefined}>
           <DialogTitle>
-            {product
-              ? t.products.editProduct
-              : t.products.addProduct}
+            {mode === "recipe"
+              ? product
+                ? t.recipes.recipeForProduct.replace("{product}", bilingual(product.name, locale))
+                : t.recipes.editRecipe
+              : product
+                ? t.products.editProduct
+                : t.products.addProduct}
           </DialogTitle>
+          {mode === "recipe" && <p className="text-sm text-muted-foreground">{t.recipes.recipeEditorHint}</p>}
         </DialogHeader>
 
-        <div className="max-h-[72vh] space-y-5 overflow-y-auto no-scrollbar px-0.5">
+        <div className={mode === "recipe" ? "max-h-[calc(90vh-145px)] space-y-5 overflow-y-auto no-scrollbar px-5 py-4 sm:px-6" : "max-h-[72vh] space-y-5 overflow-y-auto no-scrollbar px-0.5"}>
+          {mode === "recipe" && product && (
+            <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3.5 sm:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><ChefHat className="h-5 w-5" /></span>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-muted-foreground">{t.recipes.productOverview}</p>
+                    <h3 className="truncate text-base font-bold">{bilingual(product.name, locale)}</h3>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{bilingual(categories.find((category) => category.id === product.categoryId)?.name ?? { en: "", ar: "" }, locale)}</p>
+                  </div>
+                </div>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${recipe.length ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "bg-amber-500/10 text-amber-700 dark:text-amber-300"}`}>
+                  {recipe.length ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CircleAlert className="h-3.5 w-3.5" />}
+                  {recipe.length ? t.recipes.configuredStatus : t.recipes.missingStatus}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 sm:p-4">
+                {[
+                  { label: t.common.price, value: formatMoney(parsedPrice, settings.currencySymbol), Icon: Package, tone: "text-primary" },
+                  { label: t.products.recipeCost, value: formatMoney(recipeCostValue, settings.currencySymbol), Icon: Boxes, tone: "text-amber-600 dark:text-amber-400" },
+                  { label: t.products.estimatedProfit, value: formatMoney(profitValue, settings.currencySymbol), Icon: CheckCircle2, tone: profitValue >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive" },
+                  { label: t.products.estimatedMargin, value: `${marginValue.toFixed(1)}%`, Icon: ChefHat, tone: marginValue >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive" },
+                ].map(({ label, value, Icon, tone }) => (
+                  <div key={label} className="min-w-0 rounded-xl border border-border/60 bg-background/75 px-3 py-2.5">
+                    <div className="flex items-center gap-1.5 text-muted-foreground"><Icon className={`h-3.5 w-3.5 shrink-0 ${tone}`} /><p className="truncate text-[11px]">{label}</p></div>
+                    <p className={`mt-1 truncate text-sm font-bold tabular-nums ${tone}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+          {mode !== "recipe" && (
+            <>
           {/* Product name */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -698,6 +744,9 @@ export function ProductFormDialog({
             </div>
           </div>
 
+            </>
+          )}
+
           {/* ========================================================= */}
           {/* RECIPE */}
           {/* ========================================================= */}
@@ -711,13 +760,13 @@ export function ProductFormDialog({
                     {t.products.recipe}
                   </Label>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Add the ingredients used to prepare
-                    one unit of this product.
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t.recipes.recipeEditorHint}</p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  {mode === "recipe" && recipe.length > 0 && (
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={clearRecipe}>{t.recipes.clearRecipe}</Button>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
@@ -769,13 +818,7 @@ export function ProductFormDialog({
                     {t.products.noIngredients}
                   </p>
 
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Click{" "}
-                    <span className="font-medium">
-                      Add Ingredient
-                    </span>{" "}
-                    to build this recipe.
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t.recipes.recipeEditorHint}</p>
 
                   <Button
                     type="button"
@@ -790,18 +833,16 @@ export function ProductFormDialog({
                     }
                   >
                     <Plus className="h-3.5 w-3.5" />
-                    Add Ingredient
+                    {t.products.addIngredient}
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {/* Table header */}
-                  <div className="hidden grid-cols-[1fr_120px_90px_40px] gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid">
-                    <span>Ingredient</span>
-                    <span>Quantity</span>
-                    <span className="text-right">
-                      Cost
-                    </span>
+                  <div className="hidden grid-cols-[1fr_145px_110px_40px] gap-2 px-1 text-xs font-medium text-muted-foreground sm:grid">
+                    <span>{t.inventory.title}</span>
+                    <span>{t.recipes.ingredientQuantity}</span>
+                    <span className="text-end">{t.recipes.ingredientLineCost}</span>
                     <span />
                   </div>
 
@@ -828,7 +869,7 @@ export function ProductFormDialog({
                       return (
                         <div
                           key={`${ing.inventoryItemId}-${idx}`}
-                          className="grid gap-2 rounded-lg border border-border bg-muted/30 p-2 sm:grid-cols-[1fr_120px_90px_40px] sm:items-center"
+                          className="grid gap-2 rounded-xl border border-border bg-card p-2.5 shadow-sm sm:grid-cols-[1fr_145px_110px_40px] sm:items-center"
                         >
                           <div className="min-w-0">
                             <IngredientSelect
@@ -864,21 +905,12 @@ export function ProductFormDialog({
                             />
 
                             {invItem && (
-                              <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                                <span>
-                                  Unit:
-                                </span>
-
+                              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                                 <span className="rounded bg-background px-1.5 py-0.5 font-medium">
                                   {unit}
                                 </span>
-
-                                {invItem.type ===
-                                  "measured" && (
-                                  <span>
-                                    measured
-                                  </span>
-                                )}
+                                <span>{t.recipes.availableStock}: {formatNumber(invItem.quantity, 0, 3)} {unit}</span>
+                                <span>· {t.recipes.ingredientUnitCost}: {formatMoney(inventoryItemUnitCost(invItem, inventoryItems), settings.currencySymbol)} / {unit}</span>
                               </div>
                             )}
                           </div>
@@ -916,7 +948,7 @@ export function ProductFormDialog({
                             </span>
                           </div>
 
-                          <div className="text-right">
+                          <div className="text-end">
                             <p className="text-sm font-semibold">
                               {formatMoney(
                                 cost,
@@ -950,7 +982,7 @@ export function ProductFormDialog({
             </div>
 
             {/* Recipe totals */}
-            {recipe.length > 0 && (
+            {recipe.length > 0 && mode !== "recipe" && (
               <div className="border-t border-border bg-muted/40 p-4">
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div className="rounded-lg border border-border bg-background p-3">
@@ -1109,7 +1141,7 @@ export function ProductFormDialog({
           </div>
 
           {/* Modifier groups */}
-          {modifierGroups.length > 0 && (
+          {mode !== "recipe" && modifierGroups.length > 0 && (
             <div>
               <Label>
                 {t.pos.modifiers}
@@ -1142,7 +1174,7 @@ export function ProductFormDialog({
           )}
 
           {/* Active */}
-          <div className="flex items-center justify-between rounded-lg border border-border p-3">
+          {mode !== "recipe" && <div className="flex items-center justify-between rounded-lg border border-border p-3">
             <Label>
               {t.common.active}
             </Label>
@@ -1153,12 +1185,14 @@ export function ProductFormDialog({
                 setIsActive
               }
             />
-          </div>
+          </div>}
         </div>
 
         <DialogFooter
           className={
-            onNavigate
+            mode === "recipe"
+              ? "border-t border-border bg-background px-5 py-3 sm:px-6"
+              : onNavigate
               ? "sm:justify-between"
               : undefined
           }

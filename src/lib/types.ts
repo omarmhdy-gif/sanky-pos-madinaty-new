@@ -269,6 +269,12 @@ export interface InventoryItem {
    * purchase/quantity is always just the final piece count, nothing about
    * packs is stored on the order/purchase itself. */
   packSize?: number;
+  /** Whether the item is procured from suppliers or made in-house. */
+  sourcingType?: "purchased" | "manufactured";
+  /** Components required to manufacture one unit of this inventory item. */
+  manufacturingRecipe?: RecipeIngredient[];
+  /** When enabled, sales may manufacture only the shortage for this item. */
+  autoManufactureOnSale?: boolean;
 }
 
 export interface InventoryQualityCheck {
@@ -327,7 +333,7 @@ export interface Shift {
   talabatRevenue?: number;
 }
 
-export type StockMovementReason = "sale" | "manual_receive" | "waste" | "stock_count" | "opening_balance";
+export type StockMovementReason = "sale" | "manual_receive" | "waste" | "stock_count" | "opening_balance" | "manufacturing";
 
 export interface StockMovement {
   id: string;

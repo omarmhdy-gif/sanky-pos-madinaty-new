@@ -91,6 +91,9 @@ export function fromInventoryItemRow(row: any): InventoryItem {
     lowThreshold: row.low_threshold != null ? Number(row.low_threshold) : undefined,
     lastPurchaseCost: row.last_purchase_cost != null ? Number(row.last_purchase_cost) : undefined,
     packSize: row.pack_size != null ? Number(row.pack_size) : undefined,
+    sourcingType: row.sourcing_type ?? "purchased",
+    manufacturingRecipe: row.manufacturing_recipe ?? [],
+    autoManufactureOnSale: row.auto_manufacture_on_sale ?? false,
   };
 }
 
@@ -110,7 +113,10 @@ export function toInventoryItemInsertRow(
     critical_threshold: item.criticalThreshold ?? null,
     low_threshold: item.lowThreshold ?? null,
     pack_size: item.packSize ?? null,
+    sourcing_type: item.sourcingType ?? "purchased",
     last_purchase_cost: item.lastPurchaseCost ?? null,
+    manufacturing_recipe: item.manufacturingRecipe ?? [],
+    auto_manufacture_on_sale: item.autoManufactureOnSale ?? false,
   };
 }
 
@@ -124,6 +130,9 @@ export function toInventoryItemPatchRow(patch: Partial<InventoryItem>) {
   if (patch.criticalThreshold !== undefined) row.critical_threshold = patch.criticalThreshold;
   if (patch.lowThreshold !== undefined) row.low_threshold = patch.lowThreshold;
   if (patch.packSize !== undefined) row.pack_size = patch.packSize;
+  if (patch.sourcingType !== undefined) row.sourcing_type = patch.sourcingType;
+  if (patch.manufacturingRecipe !== undefined) row.manufacturing_recipe = patch.manufacturingRecipe;
+  if (patch.autoManufactureOnSale !== undefined) row.auto_manufacture_on_sale = patch.autoManufactureOnSale;
   // quantity (and cost fields) are intentionally never patched here — they
   // only change via receive_purchase (receiveStock) or record_stock_movement
   // (adjustStock), which keep every change in the stock_movements ledger.
