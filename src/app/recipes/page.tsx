@@ -13,9 +13,9 @@ import { useDataStore } from "@/lib/store/useDataStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, formatNumber, cn } from "@/lib/utils";
 import { inventoryItemUnitCost, recipeCost, estimatedProfit, estimatedMargin } from "@/lib/inventory";
-import { dateRangeForFilter, ordersInDateRange, type DateFilterKey } from "@/lib/analytics";
+import { dateRangeForFilter, type DateFilterKey } from "@/lib/analytics";
 import { toast } from "@/components/ui/toast";
-import type { RecipeIngredient } from "@/lib/types";
+import type { RecipeIngredient, StockMovement } from "@/lib/types";
 
 export default function RecipesPage() {
   const { t, locale } = useI18n();
@@ -145,50 +145,64 @@ export default function RecipesPage() {
     return rangeMovements.filter((movement) => {
       const item = inventoryItems.find((candidate) => candidate.id === movement.inventoryItemId);
       const name = movement.itemName ? `${movement.itemName.en} ${movement.itemName.ar}` : item ? `${item.name.en} ${item.name.ar}` : "";
-      return `${name} ${movement.employeeName} ${movement.reason} ${movement.orderId ?? ""}`.toLocaleLowerCase().includes(query);
+      const movementType = movementTypeLabel(movement);
+      const order = movement.orderId ? orders.find((candidate) => candidate.id === movement.orderId) : undefined;
+      const orderProducts = order?.lines.map((line) => `${line.name.en} ${line.name.ar}`).join(" ") ?? "";
+      return `${name} ${movement.employeeName} ${movement.reason} ${movementType} ${order?.orderNumber ?? ""} ${orderProducts} ${movement.orderId ?? ""}`.toLocaleLowerCase().includes(query);
     });
-  }, [rangeMovements, inventoryItems, movementSearch]);
+  }, [rangeMovements, inventoryItems, movementSearch, orders, locale]);
+
+  const actualConsumptionMovements = useMemo(() => {
+    if (consumptionDateFilter === "custom" && !consumptionDateRange) return [];
+    return stockMovements.filter((movement) => {
+      if (movement.quantityDelta >= 0 || (movement.reason !== "sale" && movement.reason !== "manufacturing")) return false;
+      if (!consumptionDateRange) return true;
+      const created = new Date(movement.createdAt);
+      return created >= consumptionDateRange.from && created <= consumptionDateRange.to;
+    });
+  }, [stockMovements, consumptionDateRange, consumptionDateFilter]);
 
   const productConsumptionRows = useMemo(() => {
-    if (consumptionDateFilter === "custom" && !consumptionDateRange) return [];
-    const soldByProduct = new Map<string, number>();
-    for (const order of ordersInDateRange(orders, consumptionDateRange)) {
-      for (const line of order.lines) {
-        soldByProduct.set(line.productId, (soldByProduct.get(line.productId) ?? 0) + line.qty);
-      }
-    }
-
-    return products.flatMap((product) => (product.recipe ?? []).flatMap((ingredient) => {
-      const item = inventoryItems.find((candidate) => candidate.id === ingredient.inventoryItemId);
-      if (!item) return [];
-      const soldQty = soldByProduct.get(product.id) ?? 0;
-      const consumedQty = ingredient.qty * soldQty;
-      return [{
-        product,
+    return actualConsumptionMovements.map((movement) => {
+      const item = inventoryItems.find((candidate) => candidate.id === movement.inventoryItemId);
+      const order = movement.orderId ? orders.find((candidate) => candidate.id === movement.orderId) : undefined;
+      const quantity = Math.abs(movement.quantityDelta);
+      return {
+        movement,
         item,
-        recipeQty: ingredient.qty,
-        soldQty,
-        consumedQty,
-        cost: consumedQty * inventoryItemUnitCost(item, inventoryItems),
-      }];
-    }));
-  }, [products, inventoryItems, orders, consumptionDateRange, consumptionDateFilter]);
+        order,
+        relatedProducts: order?.lines.map((line) => line.name) ?? [],
+        quantity,
+        unitCost: inventoryItemUnitCost(item, inventoryItems),
+        cost: quantity * inventoryItemUnitCost(item, inventoryItems),
+      };
+    });
+  }, [actualConsumptionMovements, inventoryItems, orders]);
 
   const visibleProductConsumption = useMemo(() => {
     const productQuery = productUsageSearch.trim().toLocaleLowerCase();
     const ingredientQuery = ingredientUsageSearch.trim().toLocaleLowerCase();
-    return productConsumptionRows.filter(({ product, item }) => {
-      const productMatches = !productQuery || `${product.name.en} ${product.name.ar}`.toLocaleLowerCase().includes(productQuery);
-      const ingredientMatches = !ingredientQuery || `${item.name.en} ${item.name.ar}`.toLocaleLowerCase().includes(ingredientQuery);
+    return productConsumptionRows.filter(({ movement, order, relatedProducts, item }) => {
+      const productNames = relatedProducts.map((name) => `${name.en} ${name.ar}`).join(" ");
+      const productMatches = !productQuery || `${productNames} ${order?.orderNumber ?? ""} ${movement.orderId ?? ""} ${movement.employeeName}`.toLocaleLowerCase().includes(productQuery);
+      const itemName = movement.itemName ? `${movement.itemName.en} ${movement.itemName.ar}` : item ? `${item.name.en} ${item.name.ar}` : "";
+      const ingredientMatches = !ingredientQuery || itemName.toLocaleLowerCase().includes(ingredientQuery);
       return productMatches && ingredientMatches;
     });
   }, [productConsumptionRows, productUsageSearch, ingredientUsageSearch]);
 
   const consumptionStats = useMemo(() => ({
-    products: new Set(productConsumptionRows.filter((row) => row.soldQty > 0).map((row) => row.product.id)).size,
-    ingredients: new Set(productConsumptionRows.filter((row) => row.soldQty > 0).map((row) => row.item.id)).size,
+    movements: productConsumptionRows.length,
+    ingredients: new Set(productConsumptionRows.map((row) => row.movement.inventoryItemId)).size,
     totalCost: productConsumptionRows.reduce((sum, row) => sum + row.cost, 0),
   }), [productConsumptionRows]);
+
+  function movementTypeLabel(movement: StockMovement): string {
+    if (movement.reason === "manufacturing") {
+      return movement.orderId ? t.recipes.automaticManufacturing : t.recipes.manualManufacturing;
+    }
+    return t.inventory.reasons[movement.reason];
+  }
 
   const editing = editingIndex !== null ? rows[editingIndex]?.product ?? null : null;
 
@@ -529,7 +543,7 @@ export default function RecipesPage() {
             <Card className="border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card">
               <CardContent className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
                 {[
-                  { label: t.recipes.productsSold, value: formatNumber(consumptionStats.products), Icon: Package, tone: "text-primary" },
+                  { label: t.recipes.consumptionMovements, value: formatNumber(consumptionStats.movements), Icon: ScrollText, tone: "text-primary" },
                   { label: t.recipes.ingredientsUsed, value: formatNumber(consumptionStats.ingredients), Icon: Boxes, tone: "text-violet-600 dark:text-violet-400" },
                   { label: t.recipes.estimatedConsumptionCost, value: formatMoney(consumptionStats.totalCost, settings.currencySymbol), Icon: ScrollText, tone: "text-emerald-600 dark:text-emerald-400" },
                 ].map(({ label, value, Icon, tone }) => <div key={label} className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-3.5 py-3"><span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted/70", tone)}><Icon className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 truncate text-lg font-bold tabular-nums">{value}</p></div></div>)}
@@ -540,15 +554,30 @@ export default function RecipesPage() {
                 <CardTitle className="text-base">{t.recipes.productConsumption}</CardTitle>
                 <p className="text-sm text-muted-foreground">{t.recipes.productConsumptionHint}</p>
                 <div className="grid gap-2 pt-2 md:grid-cols-2">
-                  <div className="relative"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={productUsageSearch} onChange={(event) => setProductUsageSearch(event.target.value)} placeholder={t.recipes.searchProducts} aria-label={t.recipes.searchProducts} className="ps-11" /></div>
+                  <div className="relative"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={productUsageSearch} onChange={(event) => setProductUsageSearch(event.target.value)} placeholder={t.recipes.searchOrdersOrProducts} aria-label={t.recipes.searchOrdersOrProducts} className="ps-11" /></div>
                   <div className="relative"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={ingredientUsageSearch} onChange={(event) => setIngredientUsageSearch(event.target.value)} placeholder={t.recipes.searchMaterials} aria-label={t.recipes.searchMaterials} className="ps-11" /></div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 {visibleProductConsumption.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{t.recipes.noConsumption}</p> : <div className="overflow-x-auto">
-                  <table className="w-full min-w-[900px] text-sm">
-                    <thead className="border-y border-border bg-muted/40 text-xs text-muted-foreground"><tr><th className="px-4 py-3 text-start font-medium">{t.products.title}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.recipeQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.soldQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.consumedQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.estimatedConsumptionCost}</th></tr></thead>
-                    <tbody>{visibleProductConsumption.map((row) => <tr key={`${row.product.id}:${row.item.id}`} className="border-b border-border/60 last:border-0"><td className="px-4 py-3 font-medium">{bilingual(row.product.name, locale)}</td><td className="px-4 py-3">{bilingual(row.item.name, locale)}</td><td className="px-4 py-3 text-end tabular-nums">{formatNumber(row.recipeQty, 0, 3)} {row.item.unit ?? t.inventory.pieceUnit}</td><td className="px-4 py-3 text-end tabular-nums">{formatNumber(row.soldQty, 0, 3)}</td><td className="px-4 py-3 text-end font-medium tabular-nums">{formatNumber(row.consumedQty, 0, 3)} {row.item.unit ?? t.inventory.pieceUnit}</td><td className="px-4 py-3 text-end font-semibold tabular-nums">{formatMoney(row.cost, settings.currencySymbol)}</td></tr>)}</tbody>
+                  <table className="w-full min-w-[1120px] text-sm">
+                    <thead className="border-y border-border bg-muted/40 text-xs text-muted-foreground"><tr><th className="px-4 py-3 text-start font-medium">{t.expenses.date}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th><th className="px-4 py-3 text-start font-medium">{t.recipes.movementType}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.consumedQuantity}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.costPerUnit}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.estimatedConsumptionCost}</th><th className="px-4 py-3 text-start font-medium">{t.recipes.orderOrProducts}</th></tr></thead>
+                    <tbody>{visibleProductConsumption.map((row) => {
+                      const itemName = row.movement.itemName ? bilingual(row.movement.itemName, locale) : row.item ? bilingual(row.item.name, locale) : t.inventory.unknownItem;
+                      const typeTone = row.movement.reason === "manufacturing"
+                        ? row.movement.orderId ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-violet-500/10 text-violet-700 dark:text-violet-300"
+                        : "bg-primary/10 text-primary";
+                      const orderReference = row.order?.orderNumber ?? row.movement.orderId?.slice(0, 8);
+                      return <tr key={row.movement.id} className="border-b border-border/60 last:border-0">
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{new Date(row.movement.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-US")}</td>
+                        <td className="px-4 py-3 font-medium">{itemName}</td>
+                        <td className="px-4 py-3"><span className={cn("inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", typeTone)}>{movementTypeLabel(row.movement)}</span></td>
+                        <td className="px-4 py-3 text-end font-semibold tabular-nums">{formatNumber(row.quantity, 0, 3)} {row.item?.unit ?? t.inventory.pieceUnit}</td>
+                        <td className="px-4 py-3 text-end tabular-nums">{formatMoney(row.unitCost, settings.currencySymbol)}<p className="text-xs text-muted-foreground">/ {row.item?.unit ?? t.inventory.pieceUnit}</p></td>
+                        <td className="px-4 py-3 text-end font-semibold tabular-nums">{formatMoney(row.cost, settings.currencySymbol)}</td>
+                        <td className="px-4 py-3">{orderReference ? <><p className="font-medium">{t.orders.orderNumber} #{orderReference}</p>{row.relatedProducts.length > 0 && <p className="mt-0.5 max-w-xs text-xs text-muted-foreground">{row.relatedProducts.map((name) => bilingual(name, locale)).join(" · ")}</p>}<p className="mt-0.5 text-xs text-muted-foreground">{row.movement.employeeName}</p></> : <span className="text-muted-foreground">{row.movement.employeeName}</span>}</td>
+                      </tr>;
+                    })}</tbody>
                   </table>
                 </div>}
               </CardContent>
@@ -572,18 +601,22 @@ export default function RecipesPage() {
               <CardHeader className="pb-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div><CardTitle className="text-base">{t.recipes.movementHistory}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{t.recipes.movementHistoryHint}</p></div>
-                  <div className="relative w-full md:max-w-sm"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={movementSearch} onChange={(event) => setMovementSearch(event.target.value)} placeholder={t.recipes.searchMaterials} aria-label={t.recipes.searchMaterials} className="ps-11" /></div>
+                  <div className="relative w-full md:max-w-sm"><span className="pointer-events-none absolute start-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md bg-primary/10 text-primary"><Search className="h-4 w-4" /></span><Input value={movementSearch} onChange={(event) => setMovementSearch(event.target.value)} placeholder={t.recipes.searchMovementHistory} aria-label={t.recipes.searchMovementHistory} className="ps-11" /></div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 {visibleMovements.length === 0 ? <p className="p-6 text-center text-sm text-muted-foreground">{t.recipes.noMovements}</p> : <div className="max-h-[520px] overflow-auto">
-                  <table className="w-full min-w-[760px] text-sm">
-                    <thead className="sticky top-0 border-y border-border bg-card text-xs text-muted-foreground"><tr><th className="px-4 py-3 text-start font-medium">{t.expenses.date}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.stockIn}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.stockOut}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.reason}</th><th className="px-4 py-3 text-start font-medium">{t.purchases.employee}</th></tr></thead>
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead className="sticky top-0 border-y border-border bg-card text-xs text-muted-foreground"><tr><th className="px-4 py-3 text-start font-medium">{t.expenses.date}</th><th className="px-4 py-3 text-start font-medium">{t.inventory.title}</th><th className="px-4 py-3 text-start font-medium">{t.recipes.movementType}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.stockIn}</th><th className="px-4 py-3 text-end font-medium">{t.recipes.stockOut}</th><th className="px-4 py-3 text-start font-medium">{t.purchases.employee}</th></tr></thead>
                     <tbody>{visibleMovements.map((movement) => {
                       const item = inventoryItems.find((candidate) => candidate.id === movement.inventoryItemId);
                       const name = movement.itemName ? bilingual(movement.itemName, locale) : item ? bilingual(item.name, locale) : t.inventory.unknownItem;
-                      const reason = t.inventory.reasons[movement.reason];
-                      return <tr key={movement.id} className="border-b border-border/60 last:border-0"><td className="px-4 py-3 text-muted-foreground">{new Date(movement.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-US")}</td><td className="px-4 py-3 font-medium">{name}</td><td className="px-4 py-3 text-end tabular-nums text-success">{movement.quantityDelta > 0 ? `+${formatNumber(movement.quantityDelta, 0, 3)} ${item?.unit ?? t.inventory.pieceUnit}` : "—"}</td><td className="px-4 py-3 text-end tabular-nums text-destructive">{movement.quantityDelta < 0 ? `${formatNumber(Math.abs(movement.quantityDelta), 0, 3)} ${item?.unit ?? t.inventory.pieceUnit}` : "—"}</td><td className="px-4 py-3">{reason}</td><td className="px-4 py-3 text-muted-foreground">{movement.employeeName}{movement.orderId && <p className="mt-0.5 text-xs">{t.orders.orderNumber} #{movement.orderId.slice(0, 8)}</p>}</td></tr>;
+                      const movementType = movementTypeLabel(movement);
+                      const typeTone = movement.reason === "manufacturing"
+                        ? movement.orderId ? "bg-amber-500/10 text-amber-700 dark:text-amber-300" : "bg-violet-500/10 text-violet-700 dark:text-violet-300"
+                        : movement.reason === "sale" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground";
+                      const order = movement.orderId ? orders.find((candidate) => candidate.id === movement.orderId) : undefined;
+                      return <tr key={movement.id} className="border-b border-border/60 last:border-0"><td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{new Date(movement.createdAt).toLocaleString(locale === "ar" ? "ar-EG" : "en-US")}</td><td className="px-4 py-3 font-medium">{name}</td><td className="px-4 py-3"><span className={cn("inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold", typeTone)}>{movementType}</span></td><td className="px-4 py-3 text-end tabular-nums text-success">{movement.quantityDelta > 0 ? `+${formatNumber(movement.quantityDelta, 0, 3)} ${item?.unit ?? t.inventory.pieceUnit}` : "—"}</td><td className="px-4 py-3 text-end tabular-nums text-destructive">{movement.quantityDelta < 0 ? `${formatNumber(Math.abs(movement.quantityDelta), 0, 3)} ${item?.unit ?? t.inventory.pieceUnit}` : "—"}</td><td className="px-4 py-3 text-muted-foreground">{movement.employeeName}{movement.orderId && <p className="mt-0.5 text-xs">{t.orders.orderNumber} #{order?.orderNumber ?? movement.orderId.slice(0, 8)}</p>}</td></tr>;
                     })}</tbody>
                   </table>
                 </div>}
