@@ -75,12 +75,22 @@ export default function SettingsPage() {
   const updateSettings = useDataStore((s) => s.updateSettings);
 
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
+  const branches = useBranchStore((s) => s.branches);
+  const currentBranch = branches.find((branch) => branch.id === currentBranchId);
+  const renameBranch = useBranchStore((s) => s.renameBranch);
+  const currentBranchName = currentBranch?.name[locale] || currentBranch?.name.en || "";
   const [activeSection, setActiveSection] = useState<"shop" | "receipt" | "business" | "payments">("shop");
   const [showCashierDevices, setShowCashierDevices] = useState(false);
   const [showLoyaltySettings, setShowLoyaltySettings] = useState(false);
 
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const [branchNameDraft, setBranchNameDraft] = useState(currentBranchName);
+  const [savingBranchName, setSavingBranchName] = useState(false);
+
+  useEffect(() => {
+    setBranchNameDraft(currentBranchName);
+  }, [currentBranchId, currentBranchName]);
 
   // Loyalty
   const [loyaltySettings, setLoyaltySettings] =
@@ -256,6 +266,25 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveBranchName = async () => {
+    if (!currentBranch) return;
+    const name = branchNameDraft.trim();
+    if (!name) {
+      toast(t.settings.branchNameRequired, "error");
+      return;
+    }
+
+    setSavingBranchName(true);
+    try {
+      await renameBranch(currentBranch.id, { ...currentBranch.name, [locale]: name });
+      toast(t.settings.branchNameSaved, "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t.settings.branchNameSaveError, "error");
+    } finally {
+      setSavingBranchName(false);
+    }
+  };
+
   const isArabic = locale === "ar";
   const sections = [
     { id: "shop" as const, label: isArabic ? "المحل والطاولات" : "Shop & tables", description: isArabic ? "تقسيمات الطعام وبيانات المحل" : "Dining areas and shop details", Icon: Store },
@@ -268,11 +297,17 @@ export default function SettingsPage() {
     <AppShell title={t.settings.title}>
       <div className="space-y-5 p-4 sm:p-6 pb-10">
 
-        <p className="text-sm text-muted-foreground">
-          {t.settings.subtitle}
-        </p>
+        <div className="flex items-center gap-3 px-1">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+            <MonitorCog className="h-4 w-4" />
+          </span>
+          <p className="text-sm font-semibold tracking-tight text-foreground sm:text-base">
+            {t.settings.subtitle}
+          </p>
+          <span className="h-px flex-1 bg-border/70" aria-hidden="true" />
+        </div>
 
-        <nav role="tablist" aria-label={isArabic ? "أقسام الإعدادات" : "Settings sections"} className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <nav role="tablist" aria-label={isArabic ? "أقسام الإعدادات" : "Settings sections"} className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {sections.map(({ id, label, description, Icon }) => (
             <button
               key={id}
@@ -281,18 +316,18 @@ export default function SettingsPage() {
               aria-selected={activeSection === id}
               onClick={() => setActiveSection(id)}
               className={cn(
-                "flex min-h-24 items-start gap-3 rounded-2xl border p-4 text-start transition-all",
+                "flex min-h-[4.6rem] items-center gap-2.5 rounded-xl border p-3 text-start transition-all",
                 activeSection === id
                   ? "border-primary/60 bg-primary/10 shadow-sm ring-1 ring-primary/30"
                   : "border-border bg-card hover:border-primary/40 hover:bg-muted/60"
               )}
             >
-              <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-xl", activeSection === id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                <Icon className="h-5 w-5" />
+              <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-lg", activeSection === id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                <Icon className="h-4 w-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-foreground">{label}</span>
-                <span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span>
+                <span className="block truncate text-[0.82rem] font-semibold text-foreground">{label}</span>
+                <span className="mt-0.5 block line-clamp-2 text-[0.68rem] leading-4 text-muted-foreground">{description}</span>
               </span>
             </button>
           ))}
@@ -374,6 +409,27 @@ export default function SettingsPage() {
                     })
                   }
                 />
+              </div>
+
+              <div className="sm:col-start-1">
+                <Label>{t.settings.branchName}</Label>
+                <div className="mt-1.5 flex gap-2">
+                  <Input
+                    className="min-w-0"
+                    value={branchNameDraft}
+                    onChange={(e) => setBranchNameDraft(e.target.value)}
+                    disabled={!currentBranch}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={savingBranchName || !currentBranch || !branchNameDraft.trim() || branchNameDraft.trim() === currentBranchName.trim()}
+                    onClick={handleSaveBranchName}
+                  >
+                    {savingBranchName ? t.common.loading : t.common.save}
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">{t.settings.branchNameHelp}</p>
               </div>
             </div>
 

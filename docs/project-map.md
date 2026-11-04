@@ -17,7 +17,7 @@ Offline/sync touchpoints: useOrderQueueStore.ts, offlineSnapshot.ts, storage.ts 
 Database source: supabase/schema.sql plus migration_*.sql. Search only the relevant table/function across SQL files; inspect matching definitions and subsequent redefinitions. Filenames alone do not prove execution order or which migrations are applied remotely. seed.sql and import_real_menu.sql contain data operations, not routine verification steps.
 
 ## Printing and Windows
-src/lib/printing/printReceipt.ts orchestrates printing/queue fallback; escpos.ts builds bytes; printerServerClient.ts handles transports; logoRaster.ts handles logo rasterization. Device settings/status/log stores are in src/lib/store/. SystemMonitor retries queues. UI: app/devices/page.tsx and components/pos/DesktopPrinterDialog.tsx.
+src/lib/printing/printReceipt.ts orchestrates printing/queue fallback; escpos.ts builds bytes; printerServerClient.ts handles transports; logoRaster.ts handles logo rasterization. Device settings/status/log stores are in src/lib/store/. SystemMonitor retries queues. Receipt preview is shown in Settings → Receipt; the standalone /devices route redirects to Settings. Checkout printing UI is in src/components/pos/DesktopPrinterDialog.tsx.
 
 Browser/network bridge: printer-server/server.js and its README.md (read only the relevant setup/troubleshooting section). Preserve printer-server/.certs during updates. Windows USB/network IPC: desktop/main.cjs, desktop/preload.cjs, src/types/desktop.d.ts. Trace the actual transport before assuming every receipt uses the network bridge.
 

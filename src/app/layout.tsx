@@ -6,9 +6,9 @@ import { Toaster } from "@/components/ui/toast";
 import { AppRuntime } from "@/components/layout/AppRuntime";
 
 export const metadata: Metadata = {
-  title: "Sanky POS — Coffee Shop Point of Sale",
-  description: "Fast, beautiful, bilingual point of sale for coffee shops. Built by Sanky.",
-  icons: { icon: "/sanky-logo.jpg", shortcut: "/sanky-logo.jpg", apple: "/sanky-logo.jpg" },
+  title: "NOVA — Point of Sale",
+  description: "Next-Gen Operations · Virtual Automation",
+  icons: { icon: "/nova-icon-green.svg", shortcut: "/nova-icon-green.svg", apple: "/nova-icon-green.svg" },
 };
 
 export const viewport: Viewport = {

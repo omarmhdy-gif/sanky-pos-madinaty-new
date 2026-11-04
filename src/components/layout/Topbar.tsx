@@ -9,10 +9,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useCartStore } from "@/lib/store/useCartStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
+import { useDataStore } from "@/lib/store/useDataStore";
 import { checkShopSubscription, type ShopSubscription } from "@/lib/shopSubscription";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ShopLogo } from "@/components/layout/ShopLogo";
 
 export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: string; sidebarCollapsed: boolean; onToggleSidebar: () => void }) {
   const { t, locale, setLocale } = useI18n();
@@ -24,6 +24,7 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const currentBranch = branches.find((branch) => branch.id === currentBranchId);
   const setBranch = useBranchStore((s) => s.setBranch);
+  const businessName = useDataStore((s) => s.settings.shopName.trim());
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   const [subscription, setSubscription] = useState<ShopSubscription | null>(null);
@@ -94,12 +95,12 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
   };
 
   return (
-    <header className="relative z-20 flex h-[4.5rem] shrink-0 items-center justify-between border-b border-border/70 bg-card px-3 sm:px-5 lg:px-7">
+    <header className="relative z-20 flex h-[4.5rem] shrink-0 items-center justify-between border-b border-border/70 bg-card/90 px-3 shadow-sm backdrop-blur-xl sm:px-5 lg:px-7">
       <div className="flex min-w-0 items-center gap-3">
         <Button
           variant="ghost"
           size="icon"
-          className="hidden h-9 w-9 shrink-0 rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground md:inline-flex"
+          className="hidden h-9 w-9 shrink-0 rounded-xl border border-transparent text-muted-foreground transition-all hover:border-border hover:bg-muted/70 hover:text-foreground md:inline-flex"
           onClick={onToggleSidebar}
           aria-label={sidebarCollapsed ? (locale === "ar" ? "إظهار القائمة الجانبية" : "Expand sidebar") : (locale === "ar" ? "تصغير القائمة الجانبية" : "Collapse sidebar")}
           aria-expanded={!sidebarCollapsed}
@@ -108,28 +109,29 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
         >
           {sidebarCollapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
         </Button>
-        <ShopLogo className="h-8 w-8 shrink-0 rounded-lg md:hidden" />
+        <img src="/nova-mark-transparent.svg" alt="NOVA" className="h-8 w-8 shrink-0 object-contain md:hidden" />
         <div className="min-w-0">
-          <h1 className="truncate font-sans text-base font-semibold leading-tight tracking-tight sm:text-lg">{title}</h1>
+          {businessName && <p className="mb-0.5 max-w-48 truncate text-[9px] font-semibold leading-none text-primary sm:hidden">{businessName}</p>}
+          <h1 className="truncate font-sans text-[15px] font-semibold leading-tight tracking-tight sm:text-lg">{title}</h1>
           {now && (
-            <p className="mt-1 flex items-center gap-1.5 text-[10px] leading-tight text-muted-foreground sm:text-[11px]">
-            <Clock3 className="h-3 w-3" />
-            {now.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
-              weekday: "long",
-              month: "short",
-              day: "numeric",
-            })}{" "}
-            ·{" "}
-            {now.toLocaleTimeString(locale === "ar" ? "ar-EG" : "en-US", {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
+            <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-muted/65 px-2 py-0.5 text-[10px] leading-tight text-muted-foreground sm:text-[11px]">
+              <Clock3 className="h-3 w-3 text-primary/80" />
+              {now.toLocaleDateString(locale === "ar" ? "ar-EG" : "en-US", {
+                weekday: "long",
+                month: "short",
+                day: "numeric",
+              })}{" "}
+              ·{" "}
+              {now.toLocaleTimeString(locale === "ar" ? "ar-EG" : "en-US", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </p>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2.5">
+      <div className="flex items-center gap-1.5 sm:gap-2.5">
         {/* Owner-only, instant branch switch — distinct from the "Switch
             Branch" menu item below, which fully logs out and re-prompts for
             a PIN. This one keeps the owner authenticated and just changes
@@ -138,9 +140,12 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
         {currentBranch && (currentUser?.role === "owner" && branches.length > 1 ? (
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button type="button" title={`${t.common.quickSwitchBranch} · ${subscriptionLabel ?? ""}`} className="hidden max-w-72 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-start text-sm transition-colors hover:bg-accent sm:flex">
-                <Store className="h-4 w-4 shrink-0 text-primary" />
-                <span className="max-w-32 truncate font-medium">{bilingual(currentBranch.name, locale)}</span>
+              <button type="button" title={`${t.common.quickSwitchBranch} · ${subscriptionLabel ?? ""}`} className="group hidden max-w-80 items-center gap-2 rounded-full px-2 py-1.5 text-start text-sm transition-colors hover:bg-muted/55 sm:flex">
+                <Store className="h-4 w-4 shrink-0 text-primary/85 transition-colors group-hover:text-primary" />
+                <span className="flex min-w-0 flex-col">
+                  {businessName && <span className="max-w-44 truncate text-[13px] font-semibold leading-tight text-foreground">{businessName}</span>}
+                  <span className={cn("max-w-44 truncate leading-tight", businessName ? "text-[10px] text-muted-foreground" : "text-sm font-semibold text-foreground")}>{bilingual(currentBranch.name, locale)}</span>
+                </span>
                 {subscriptionLabel && subscription?.state !== "checking" && (
                   <span className={cn("inline-flex max-w-36 shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none", subscriptionTone)}>
                     <Clock3 className="h-3 w-3 shrink-0" />
@@ -173,9 +178,12 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         ) : (
-          <div title={subscriptionLabel ?? undefined} className="hidden max-w-72 items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm sm:flex">
-            <Store className="h-4 w-4 text-primary" />
-            <span className="max-w-32 truncate font-medium">{bilingual(currentBranch.name, locale)}</span>
+          <div title={subscriptionLabel ?? undefined} className="hidden max-w-80 items-center gap-2 rounded-full px-2 py-1.5 text-sm sm:flex">
+            <Store className="h-4 w-4 shrink-0 text-primary/85" />
+            <span className="flex min-w-0 flex-col">
+              {businessName && <span className="max-w-44 truncate text-[13px] font-semibold leading-tight text-foreground">{businessName}</span>}
+              <span className={cn("max-w-44 truncate leading-tight", businessName ? "text-[10px] text-muted-foreground" : "text-sm font-semibold text-foreground")}>{bilingual(currentBranch.name, locale)}</span>
+            </span>
             {subscriptionLabel && subscription?.state !== "checking" && (
               <span className={cn("inline-flex max-w-36 shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold leading-none", subscriptionTone)}>
                 <Clock3 className="h-3 w-3 shrink-0" />
@@ -184,11 +192,12 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
             )}
           </div>
         ))}
-        <div className="flex items-center gap-0.5 rounded-xl border border-border/80 bg-background/60 p-0.5">
+        <span className="mx-1 hidden h-7 w-px bg-border/70 sm:block" aria-hidden="true" />
+        <div className="flex items-center gap-0.5">
         <Button
           variant="ghost"
           size="icon"
-          className="relative h-9 w-10 rounded-lg text-foreground/75 transition-colors hover:bg-accent hover:text-primary"
+          className="relative h-9 w-9 rounded-full text-foreground/70 transition-colors hover:bg-muted/65 hover:text-primary"
           onClick={() => setLocale(locale === "en" ? "ar" : "en")}
           aria-label={locale === "en" ? "التبديل إلى العربية" : "Switch to English"}
           title={locale === "en" ? "العربية" : "English"}
@@ -198,14 +207,15 @@ export function Topbar({ title, sidebarCollapsed, onToggleSidebar }: { title: st
             {locale === "en" ? "ع" : "EN"}
           </span>
         </Button>
-        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" onClick={toggleTheme} aria-label={locale === "ar" ? "تبديل السمة" : "Toggle theme"} title={locale === "ar" ? "تبديل السمة" : "Toggle theme"}>
+        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full text-foreground/70 transition-colors hover:bg-muted/65 hover:text-primary" onClick={toggleTheme} aria-label={locale === "ar" ? "تبديل السمة" : "Toggle theme"} title={locale === "ar" ? "تبديل السمة" : "Toggle theme"}>
           {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
         </Button>
         </div>
 
+        <span className="mx-1 hidden h-7 w-px bg-border/70 sm:block" aria-hidden="true" />
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <button type="button" aria-label={currentUser ? `${currentUser.name}, ${t.settings.roles[currentUser.role]}` : (locale === "ar" ? "حساب المستخدم" : "User account")} className="group flex items-center gap-2 rounded-xl border border-transparent bg-background/50 py-1 ps-1 pe-1.5 transition-all hover:border-border hover:bg-accent/70 sm:pe-2.5">
+            <button type="button" aria-label={currentUser ? `${currentUser.name}, ${t.settings.roles[currentUser.role]}` : (locale === "ar" ? "حساب المستخدم" : "User account")} className="group flex items-center gap-2 rounded-full px-1 py-1 transition-colors hover:bg-muted/55 sm:ps-1 sm:pe-2">
               <div
                 className={cn(
                   "relative flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white shadow-sm ring-2 ring-background transition-transform group-hover:scale-[1.03]",

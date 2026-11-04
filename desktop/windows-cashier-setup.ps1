@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $taskName = "SankyPOS-App-Launch"
 $userName = "SankyCashier"
+$cashierPassword = "0000"
 $winlogonPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
 $logDirectory = Join-Path $env:ProgramData "SankyPOS"
 $logPath = Join-Path $logDirectory "cashier-setup.log"
@@ -122,7 +123,11 @@ public static class SankyLsaSecret {
       var key = MakeString(name, out keyBuffer);
       policy = OpenPolicy();
       uint status = LsaStorePrivateData(policy, ref key, IntPtr.Zero);
-      if (status != 0) throw new InvalidOperationException("LsaStorePrivateData clear failed: " + LsaNtStatusToWinError(status));
+      if (status != 0) {
+        uint error = LsaNtStatusToWinError(status);
+        // Clearing a secret that has never been created is already the desired state.
+        if (error != 2) throw new InvalidOperationException("LsaStorePrivateData clear failed: " + error);
+      }
     } finally {
       if (policy != IntPtr.Zero) LsaClose(policy);
       if (keyBuffer != IntPtr.Zero) Marshal.FreeHGlobal(keyBuffer);
@@ -187,17 +192,23 @@ function Invoke-SankyAssignedAccess([ValidateSet("Apply", "Remove")][string]$Act
   }
 
   try {
+    if ($existingTask) {
+      Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+      Write-SetupLog "Removed the previous Sanky Assigned Access task before creating a fresh system task."
+    }
     $taskAction = New-ScheduledTaskAction -Execute $powershellPath -Argument $arguments
     $taskPrincipal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    Register-ScheduledTask -TaskName $taskName -Action $taskAction -Principal $taskPrincipal -Force | Out-Null
+    $taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName $taskName -Action $taskAction -Principal $taskPrincipal -Settings $taskSettings -Force | Out-Null
     Start-ScheduledTask -TaskName $taskName
 
-    for ($attempt = 0; $attempt -lt 60 -and -not (Test-Path -LiteralPath $resultPath -PathType Leaf); $attempt++) {
+    for ($attempt = 0; $attempt -lt 180 -and -not (Test-Path -LiteralPath $resultPath -PathType Leaf); $attempt++) {
       Start-Sleep -Seconds 1
     }
     if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
       $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName
-      throw "Windows could not apply the app-only access profile (task result $($taskInfo.LastTaskResult))."
+      $taskState = (Get-ScheduledTask -TaskName $taskName).State
+      throw "Windows did not finish applying the app-only access profile within 180 seconds (task state $taskState; result $($taskInfo.LastTaskResult))."
     }
     $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
     if (-not $result.ok) { throw [string]$result.error }
@@ -259,6 +270,12 @@ function Set-ExistingCashierPassword([string]$Password) {
 }
 
 if ($Remove) {
+  $settings = Get-ItemProperty -LiteralPath $winlogonPath -ErrorAction SilentlyContinue
+  if ($settings.AutoAdminLogon -eq "1" -and $settings.DefaultUserName -eq $userName -and $settings.DefaultDomainName -eq $env:COMPUTERNAME) {
+    Set-ItemProperty -LiteralPath $winlogonPath -Name AutoAdminLogon -Value "0"
+    Remove-ItemProperty -LiteralPath $winlogonPath -Name DefaultUserName, DefaultDomainName, DefaultPassword -ErrorAction SilentlyContinue
+    Write-SetupLog "Disabled automatic sign-in for the Sanky Windows account before removing its app-only profile."
+  }
   try {
     Invoke-SankyAssignedAccess -Action Remove
   } catch {
@@ -267,13 +284,9 @@ if ($Remove) {
   }
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
   Unregister-ScheduledTask -TaskName "SankyPOS-Cashier-Launch" -Confirm:$false -ErrorAction SilentlyContinue
-  $settings = Get-ItemProperty -LiteralPath $winlogonPath
-  if ($settings.DefaultUserName -eq $userName -and $settings.DefaultDomainName -eq $env:COMPUTERNAME) {
-    Set-ItemProperty -LiteralPath $winlogonPath -Name AutoAdminLogon -Value "0"
-    Remove-ItemProperty -LiteralPath $winlogonPath -Name DefaultUserName, DefaultDomainName -ErrorAction SilentlyContinue
-  }
-  Write-Output "Automatic sign-in and Sanky startup were removed. The dedicated Windows application account, password secret, and profile were left intact."
-  Write-SetupLog "Removed automatic sign-in and application startup task."
+  [SankyLsaSecret]::Clear("DefaultPassword")
+  Write-Output "The Sanky app-only profile was removed. The dedicated Windows account and SankyPOS data were left intact."
+  Write-SetupLog "Removed the app-only profile and automatic sign-in secret; preserved the Windows account and application data."
   exit 0
 }
 
@@ -284,14 +297,13 @@ try {
   Write-SetupLog "Could not read Windows sign-in settings: $($_.Exception.ToString())"
   throw
 }
-if ($winlogon.AutoAdminLogon -eq "1" -and ($winlogon.DefaultUserName -ne $userName -or $winlogon.DefaultDomainName -ne $env:COMPUTERNAME)) {
-  Write-SetupLog "Setup stopped because automatic sign-in is already configured for another Windows account."
-  throw "Windows already has automatic sign-in configured for another account. Sanky did not change it."
+if ($winlogon.AutoAdminLogon -eq "1") {
+  Set-ItemProperty -LiteralPath $winlogonPath -Name AutoAdminLogon -Value "0"
+  Remove-ItemProperty -LiteralPath $winlogonPath -Name DefaultUserName, DefaultDomainName, DefaultPassword -ErrorAction SilentlyContinue
+  Write-SetupLog "Disabled Windows automatic sign-in so the account chooser is shown at startup."
 }
 
 $createdAccount = $false
-$createdSecret = $false
-$preserveSecret = $false
 $assignedAccessApplied = $false
 try {
   Write-SetupLog "Checking for the dedicated Windows application account by security identity."
@@ -305,39 +317,27 @@ try {
   Write-SetupLog "Sanky POS application account exists: $accountExists"
 
   if (-not $accountExists) {
-    Add-Type -AssemblyName System.Web
-    $password = [System.Web.Security.Membership]::GeneratePassword(40, 10)
-    New-CashierWindowsAccount -Password $password
+    New-CashierWindowsAccount -Password $cashierPassword
     $createdAccount = $true
-    [SankyLsaSecret]::Store("DefaultPassword", $password)
-    $createdSecret = $true
-    $password = $null
-  } elseif (-not [SankyLsaSecret]::Retrieve("DefaultPassword")) {
-    Add-Type -AssemblyName System.Web
-    $password = [System.Web.Security.Membership]::GeneratePassword(40, 10)
-    Set-ExistingCashierPassword -Password $password
-    [SankyLsaSecret]::Store("DefaultPassword", $password)
-    $password = $null
-    $preserveSecret = $true
-    Write-SetupLog "Recovered the existing dedicated application account and stored a fresh automatic sign-in secret."
+  } else {
+    Set-ExistingCashierPassword -Password $cashierPassword
   }
+  [SankyLsaSecret]::Clear("DefaultPassword")
 
   Invoke-SankyAssignedAccess -Action Apply
   $assignedAccessApplied = $true
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-  Set-ItemProperty -LiteralPath $winlogonPath -Name DefaultUserName -Value $userName
-  Set-ItemProperty -LiteralPath $winlogonPath -Name DefaultDomainName -Value $env:COMPUTERNAME
-  Remove-ItemProperty -LiteralPath $winlogonPath -Name DefaultPassword -ErrorAction SilentlyContinue
-  Set-ItemProperty -LiteralPath $winlogonPath -Name AutoAdminLogon -Value "1"
-  Write-Output "The Sanky POS Windows application account is locked to the POS app. Use Ctrl+Alt+Delete, then Switch user, to sign in to another Windows account. Restart Windows to start Sanky automatically."
-  Write-SetupLog "Sanky POS app-only Windows account, Assigned Access profile, and automatic sign-in completed successfully."
+  Set-ItemProperty -LiteralPath $winlogonPath -Name AutoAdminLogon -Value "0"
+  Remove-ItemProperty -LiteralPath $winlogonPath -Name DefaultUserName, DefaultDomainName, DefaultPassword -ErrorAction SilentlyContinue
+  Write-Output "The Sanky POS Windows account is ready. Sign in as SankyCashier with password 0000; Windows will open only the POS app. Use Ctrl+Alt+Delete, then Switch user, to return to another Windows account."
+  Write-SetupLog "Sanky POS app-only Windows account and Assigned Access profile completed; automatic Windows sign-in is disabled."
 } catch {
   Write-SetupLog "Setup failed: $($_.Exception.ToString())"
   if ($assignedAccessApplied) {
     try { Invoke-SankyAssignedAccess -Action Remove } catch { Write-SetupLog "Could not roll back Assigned Access: $($_.Exception.Message)" }
   }
   Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-  if ($createdSecret -and -not $preserveSecret) { [SankyLsaSecret]::Clear("DefaultPassword") }
+  [SankyLsaSecret]::Clear("DefaultPassword")
   if ($createdAccount) { try { Remove-CashierWindowsAccount } catch { Write-SetupLog "Could not remove the new application account during rollback: $($_.Exception.Message)" } }
   throw
 }

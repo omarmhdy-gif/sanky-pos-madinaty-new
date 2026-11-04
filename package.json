@@ -1,6 +1,6 @@
 {
   "name": "sanky-pos",
-  "version": "1.0.2",
+  "version": "1.0.7",
   "private": true,
   "description": "Sanky POS - Coffee shop point of sale system",
   "repository": {
@@ -12,7 +12,7 @@
     "build": "next build && node scripts/create-renderer-manifest.mjs",
     "start": "next start",
     "lint": "next lint",
-    "desktop:build": "npm run build && electron-builder --win dir --config.directories.output=release && electron-builder --prepackaged release/win-unpacked --win nsis --config.directories.output=release-installer && electron-builder --prepackaged release/win-unpacked --win portable --config.directories.output=release-portable"
+    "desktop:build": "npm run build && electron-builder --win dir --config.directories.output=release && node scripts/verify-desktop-renderer.mjs release/win-unpacked/resources/out && electron-builder --prepackaged release/win-unpacked --win nsis --config.directories.output=release-installer && electron-builder --prepackaged release/win-unpacked --win portable --config.directories.output=release-portable"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.4",
@@ -55,9 +55,11 @@
   "main": "desktop/main.cjs",
   "build": {
     "asar": true,
+    "npmRebuild": false,
     "nsis": {
       "allowToChangeInstallationDirectory": true,
       "oneClick": false,
+      "runAfterFinish": false,
       "perMachine": true,
       "allowElevation": true,
       "installerIcon": "desktop/sanky.ico",
@@ -80,10 +82,14 @@
     "files": [
       "desktop/main.cjs",
       "desktop/preload.cjs",
-      "out/**/*",
       "package.json"
     ],
     "extraResources": [
+      {
+        "from": "out",
+        "to": "out",
+        "filter": ["**/*"]
+      },
       {
         "from": "desktop/windows-cashier-setup.ps1",
         "to": "windows-cashier-setup.ps1"

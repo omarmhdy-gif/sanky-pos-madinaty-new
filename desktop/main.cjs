@@ -17,7 +17,7 @@ app.setPath("userData", USER_DATA_ROOT);
 const SERVER_PORT = 41737;
 const ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
 const PRODUCTION_ORIGIN = "https://sanky-pos-madinaty-new.vercel.app";
-const BUNDLED_STATIC_ROOT = path.join(app.getAppPath(), "out");
+const BUNDLED_STATIC_ROOT = path.join(process.resourcesPath, "out");
 const RENDERER_ROOT = path.join(USER_DATA_ROOT, "renderers");
 const RENDERER_POINTER = path.join(USER_DATA_ROOT, "renderer-current.json");
 const MAX_RENDERER_FILES = 15000;

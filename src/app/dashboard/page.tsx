@@ -3,20 +3,12 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
-  DollarSign,
-  ClipboardList,
-  ShoppingBasket,
-  WalletCards,
-  PiggyBank,
-  TriangleAlert,
-  UsersRound,
-  Trash2,
   Banknote,
   CreditCard,
-  Wallet,
+  DollarSign,
   Split,
-  MoreHorizontal,
-  ArrowUpRight,
+  Trash2,
+  Wallet,
 } from "lucide-react";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -77,8 +69,10 @@ type MetricAccent =
 const metricStyles: Record<
   MetricAccent,
   {
-    icon: string;
-    iconColor: string;
+    label: string;
+    value: string;
+    surface: string;
+    bar: string;
     glow: string;
     border: string;
     shadow: string;
@@ -86,8 +80,10 @@ const metricStyles: Record<
   }
 > = {
   brown: {
-    icon: "bg-[#eadfd3] dark:bg-[#3b3027]",
-    iconColor: "text-[#704522] dark:text-[#d9b58e]",
+    label: "text-[#704522] dark:text-[#d9b58e]",
+    value: "text-[#704522] dark:text-[#d9b58e]",
+    surface: "from-[#f3e7da]/90 dark:from-[#392b20]/60",
+    bar: "from-[#704522] via-[#b99674] to-transparent dark:from-[#d9b58e]",
     glow: "bg-[#704522]/10 dark:bg-[#d9b58e]/10",
     border: "hover:border-[#b99674] dark:hover:border-[#8c6848]",
     shadow:
@@ -96,8 +92,10 @@ const metricStyles: Record<
   },
 
   green: {
-    icon: "bg-[#e3ecd9] dark:bg-[#303a28]",
-    iconColor: "text-[#628044] dark:text-[#a8c487]",
+    label: "text-[#628044] dark:text-[#a8c487]",
+    value: "text-[#628044] dark:text-[#a8c487]",
+    surface: "from-[#e7efdf]/90 dark:from-[#303a28]/65",
+    bar: "from-[#628044] via-[#9dbb80] to-transparent dark:from-[#a8c487]",
     glow: "bg-[#628044]/10 dark:bg-[#a8c487]/10",
     border: "hover:border-[#9dbb80] dark:hover:border-[#6f8d52]",
     shadow:
@@ -106,8 +104,10 @@ const metricStyles: Record<
   },
 
   orange: {
-    icon: "bg-[#fff0d8] dark:bg-[#403521]",
-    iconColor: "text-[#dd8711] dark:text-[#f0ad55]",
+    label: "text-[#b16c08] dark:text-[#f0ad55]",
+    value: "text-[#b16c08] dark:text-[#f0ad55]",
+    surface: "from-[#fff1dc]/90 dark:from-[#403521]/65",
+    bar: "from-[#dd8711] via-[#f0ad55] to-transparent dark:from-[#f0ad55]",
     glow: "bg-[#dd8711]/10 dark:bg-[#f0ad55]/10",
     border: "hover:border-[#e8b15e] dark:hover:border-[#a9783c]",
     shadow:
@@ -116,8 +116,10 @@ const metricStyles: Record<
   },
 
   blue: {
-    icon: "bg-[#dff1fa] dark:bg-[#263943]",
-    iconColor: "text-[#138bc9] dark:text-[#65b9e3]",
+    label: "text-[#138bc9] dark:text-[#65b9e3]",
+    value: "text-[#138bc9] dark:text-[#65b9e3]",
+    surface: "from-[#e4f3fa]/90 dark:from-[#263943]/65",
+    bar: "from-[#138bc9] via-[#65b9e3] to-transparent dark:from-[#65b9e3]",
     glow: "bg-[#138bc9]/10 dark:bg-[#65b9e3]/10",
     border: "hover:border-[#82c5e5] dark:hover:border-[#467d99]",
     shadow:
@@ -126,8 +128,10 @@ const metricStyles: Record<
   },
 
   olive: {
-    icon: "bg-[#e6ecd9] dark:bg-[#303829]",
-    iconColor: "text-[#668044] dark:text-[#adc58a]",
+    label: "text-[#668044] dark:text-[#adc58a]",
+    value: "text-[#668044] dark:text-[#adc58a]",
+    surface: "from-[#eaf0df]/90 dark:from-[#303829]/65",
+    bar: "from-[#668044] via-[#adc58a] to-transparent dark:from-[#adc58a]",
     glow: "bg-[#668044]/10 dark:bg-[#adc58a]/10",
     border: "hover:border-[#a9bd82] dark:hover:border-[#718c52]",
     shadow:
@@ -136,8 +140,10 @@ const metricStyles: Record<
   },
 
   red: {
-    icon: "bg-[#fde3e3] dark:bg-[#402727]",
-    iconColor: "text-[#d84b4b] dark:text-[#ef8989]",
+    label: "text-[#c64141] dark:text-[#ef8989]",
+    value: "text-[#c64141] dark:text-[#ef8989]",
+    surface: "from-[#fde8e8]/90 dark:from-[#402727]/65",
+    bar: "from-[#d84b4b] via-[#ef8989] to-transparent dark:from-[#ef8989]",
     glow: "bg-[#d84b4b]/10 dark:bg-[#ef8989]/10",
     border: "hover:border-[#e6a0a0] dark:hover:border-[#955858]",
     shadow:
@@ -146,8 +152,10 @@ const metricStyles: Record<
   },
 
   purple: {
-    icon: "bg-[#eee4fa] dark:bg-[#352b40]",
-    iconColor: "text-[#7a49b5] dark:text-[#b58bdd]",
+    label: "text-[#7a49b5] dark:text-[#b58bdd]",
+    value: "text-[#7a49b5] dark:text-[#b58bdd]",
+    surface: "from-[#f0e8fb]/90 dark:from-[#352b40]/65",
+    bar: "from-[#7a49b5] via-[#b58bdd] to-transparent dark:from-[#b58bdd]",
     glow: "bg-[#7a49b5]/10 dark:bg-[#b58bdd]/10",
     border: "hover:border-[#b99add] dark:hover:border-[#795d93]",
     shadow:
@@ -157,14 +165,12 @@ const metricStyles: Record<
 };
 
 function MetricCard({
-  icon: Icon,
   label,
   value,
   accent,
   note,
   className = "",
 }: {
-  icon: typeof DollarSign;
   label: string;
   value: string;
   accent: MetricAccent;
@@ -175,9 +181,9 @@ function MetricCard({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-[22px]
-        border border-border
-        bg-gradient-to-br from-card via-card to-muted/35 p-4 sm:p-5
+      className={`group relative min-h-[136px] overflow-hidden rounded-[22px]
+        border border-border/80
+        bg-gradient-to-br ${style.surface} via-card to-card p-4 sm:p-5
         shadow-[0_3px_18px_hsl(var(--foreground)/0.055)]
         transition-all duration-200 ease-out
         hover:-translate-y-1
@@ -185,47 +191,27 @@ function MetricCard({
         ${style.shadow}
         ${className}`}
     >
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${style.bar}`} />
+
       {/* Hover glow */}
       <div
         className={`pointer-events-none absolute -bottom-10 -right-8 h-28 w-28 rounded-full blur-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${style.glow}`}
       />
 
-      <div className="relative flex items-start gap-4">
-        {/* Icon */}
-        <div
-          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl
-            transition-all duration-200 ease-out
-            group-hover:scale-105
-            group-hover:-translate-y-0.5
-            ${style.icon}`}
-        >
-          <Icon
-            className={`h-7 w-7 transition-transform duration-200 group-hover:scale-110 ${style.iconColor}`}
-            strokeWidth={1.9}
-          />
-        </div>
+      <div className="relative min-w-0 pt-1">
+        <p className={`text-[13px] font-semibold tracking-wide transition-colors duration-200 ${style.label}`}>
+          {label}
+        </p>
 
-        {/* Content */}
-        <div className="min-w-0 flex-1 pt-1">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-[14px] font-medium text-muted-foreground transition-colors duration-200 group-hover:text-foreground">
-              {label}
-            </p>
+        <p className={`mt-3 truncate text-2xl font-bold leading-tight tracking-[-0.035em] transition-transform duration-200 group-hover:translate-x-0.5 ${style.value}`}>
+          {value}
+        </p>
 
-            <MoreHorizontal className="h-5 w-5 shrink-0 text-muted-foreground/60 transition-all duration-200 group-hover:scale-110 group-hover:text-foreground" />
-          </div>
-
-          <p className="mt-1.5 truncate text-[26px] font-bold leading-tight tracking-[-0.035em] text-foreground transition-transform duration-200 group-hover:translate-x-0.5 sm:text-[28px]">
-            {value}
+        {note && (
+          <p className={`mt-2 text-xs font-medium transition-transform duration-200 group-hover:translate-x-0.5 ${style.label}`}>
+            {note}
           </p>
-
-          {note && (
-            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-success transition-transform duration-200 group-hover:translate-x-0.5">
-              <ArrowUpRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-              {note}
-            </p>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Bottom hover accent */}
@@ -330,10 +316,6 @@ export default function DashboardPage() {
     ordersInDateRange(orders, range)
   );
 
-  const ExternalIcon = getExternalPaymentIcon(
-    settings.externalPaymentIcon
-  );
-
   const externalName = locale === "ar" ? "المدفوعات الخارجية" : "External payments";
 
   return (
@@ -346,7 +328,7 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-[28px] font-bold tracking-[-0.035em] text-[#241b15] dark:text-foreground sm:text-[32px]">
                 {t.dashboard.welcome},{" "}
-                {currentUser?.name.split(" ")[0]} 👋
+                {currentUser?.name.split(" ")[0]}
               </h2>
 
               <p className="mt-1 text-sm text-[#81766b] dark:text-muted-foreground">
@@ -369,7 +351,6 @@ export default function DashboardPage() {
           {/* MAIN METRICS */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <MetricCard
-              icon={DollarSign}
               label={t.dashboard.todaySales}
               value={formatMoney(
                 rangeTotal,
@@ -379,14 +360,12 @@ export default function DashboardPage() {
             />
 
             <MetricCard
-              icon={ClipboardList}
               label={t.dashboard.todayOrders}
               value={formatNumber(rangeOrders.length)}
               accent="green"
             />
 
             <MetricCard
-              icon={ShoppingBasket}
               label={t.dashboard.monthlyPurchases}
               value={formatMoney(
                 monthly.purchasesTotal,
@@ -396,7 +375,6 @@ export default function DashboardPage() {
             />
 
             <MetricCard
-              icon={WalletCards}
               label={t.dashboard.monthlyExpenses}
               value={formatMoney(
                 monthly.expensesTotal,
@@ -406,7 +384,6 @@ export default function DashboardPage() {
             />
 
             <MetricCard
-              icon={PiggyBank}
               label={t.dashboard.estimatedGrossProfit}
               value={formatMoney(
                 monthly.grossProfit,
@@ -420,7 +397,6 @@ export default function DashboardPage() {
             />
 
             <MetricCard
-              icon={TriangleAlert}
               label={t.dashboard.lowStock}
               value={formatNumber(lowStockCount)}
               accent={
@@ -434,7 +410,6 @@ export default function DashboardPage() {
             />
 
             <MetricCard
-              icon={UsersRound}
               label={t.dashboard.employeesWorking}
               value={formatNumber(workingCount)}
               accent="purple"
@@ -477,11 +452,7 @@ export default function DashboardPage() {
 
             {/* EXTERNAL MARKETPLACE */}
             <section className="overflow-hidden rounded-[24px] border border-[#f0dcca] dark:border-[#4a3727] bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
-              <div className="flex items-center gap-4 border-b border-border px-6 py-5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#fff0df] dark:bg-[#403024]">
-                  <ExternalIcon className="h-6 w-6 text-[#f05a16] dark:text-[#ff8a55]" />
-                </div>
-
+              <div className="border-b border-orange-200/70 bg-gradient-to-r from-orange-50/80 to-transparent px-6 py-5 dark:border-orange-950/50 dark:from-orange-950/20">
                 <div>
                   <h3 className="font-bold text-foreground">
                     {t.dashboard.externalSection.replace(
@@ -498,7 +469,6 @@ export default function DashboardPage() {
 
               <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
                 <MetricCard
-                  icon={ClipboardList}
                   label={t.dashboard.externalOrders.replace(
                     "{name}",
                     externalName
@@ -508,7 +478,6 @@ export default function DashboardPage() {
                 />
 
                 <MetricCard
-                  icon={DollarSign}
                   label={t.dashboard.externalRevenue.replace(
                     "{name}",
                     externalName
@@ -524,11 +493,7 @@ export default function DashboardPage() {
 
             {/* WASTE */}
             <section className="overflow-hidden rounded-[24px] border border-[#eadede] dark:border-[#472e2e] bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
-              <div className="flex items-center gap-4 border-b border-rose-200/70 bg-gradient-to-r from-rose-50/80 to-transparent px-6 py-5 dark:border-rose-950/60 dark:from-rose-950/20">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-100 shadow-sm dark:bg-rose-950/50">
-                  <Trash2 className="h-6 w-6 text-[#d84b4b] dark:text-[#ef8989]" />
-                </div>
-
+              <div className="border-b border-rose-200/70 bg-gradient-to-r from-rose-50/80 to-transparent px-6 py-5 dark:border-rose-950/60 dark:from-rose-950/20">
                 <div>
                   <h3 className="font-bold tracking-tight text-foreground">
                     {t.dashboard.wasteSection}
@@ -540,19 +505,16 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 sm:p-5">
+              <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-5">
                 {[
-                  { icon: ClipboardList, label: locale === "ar" ? "طلبات الهالك" : "Waste orders", value: formatNumber(waste.count) },
-                  { icon: DollarSign, label: locale === "ar" ? "تكلفة الهالك" : "Waste cost", value: formatMoney(waste.cost, settings.currencySymbol) },
-                  { icon: DollarSign, label: locale === "ar" ? "قيمة المبيعات" : "Sales value", value: formatMoney(waste.sellingValue, settings.currencySymbol) },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex min-w-0 items-center gap-3 rounded-2xl border border-rose-100 bg-rose-50/65 px-4 py-3.5 dark:border-rose-950/60 dark:bg-rose-950/20">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-rose-600 shadow-sm dark:bg-rose-900/30 dark:text-rose-300">
-                      <Icon className="h-4 w-4" />
-                    </span>
+                  { label: locale === "ar" ? "طلبات الهالك" : "Waste orders", value: formatNumber(waste.count) },
+                  { label: locale === "ar" ? "تكلفة الهالك" : "Waste cost", value: formatMoney(waste.cost, settings.currencySymbol) },
+                  { label: locale === "ar" ? "قيمة المبيعات" : "Sales value", value: formatMoney(waste.sellingValue, settings.currencySymbol) },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex min-h-[136px] min-w-0 flex-col justify-center rounded-2xl border border-rose-200/70 border-s-4 border-s-rose-400 bg-rose-50/65 px-4 py-3.5 dark:border-rose-950/60 dark:border-s-rose-400 dark:bg-rose-950/20">
                     <span className="min-w-0">
                       <span className="block truncate text-xs font-medium text-muted-foreground">{label}</span>
-                      <span className="mt-1 block truncate text-lg font-bold tracking-tight text-foreground">{value}</span>
+                      <span className="mt-2 block truncate text-2xl font-bold leading-tight tracking-[-0.035em] text-rose-700 dark:text-rose-300">{value}</span>
                     </span>
                   </div>
                 ))}
@@ -637,7 +599,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={p.method}
-                      className="group rounded-[20px] border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_10px_24px_hsl(var(--foreground)/0.08)]"
+                      className="group flex min-h-[220px] flex-col rounded-[20px] border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_10px_24px_hsl(var(--foreground)/0.08)]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${methodStyle}`}>
@@ -682,7 +644,7 @@ export default function DashboardPage() {
                         {t.dashboard.paymentBreakdownOrders}
                       </p>
 
-                      <p className="mt-3 text-[20px] font-bold tracking-tight text-foreground">
+                      <p className="mt-auto pt-3 text-2xl font-bold leading-tight tracking-[-0.035em] text-foreground">
                         {formatMoney(
                           p.total,
                           settings.currencySymbol

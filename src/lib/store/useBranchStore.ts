@@ -23,6 +23,7 @@ interface BranchStore {
   loaded: boolean;
   error: string | null;
   fetchBranches: () => Promise<void>;
+  renameBranch: (id: string, name: Branch["name"]) => Promise<void>;
   setBranch: (id: string) => void;
   clearBranch: () => void;
 }
@@ -79,6 +80,13 @@ export const useBranchStore = create<BranchStore>()(
             error: message,
           });
         }
+      },
+
+      renameBranch: async (id, name) => {
+        const updated = await api.updateBranchName(id, name);
+        set((state) => ({
+          branches: state.branches.map((branch) => branch.id === id ? updated : branch),
+        }));
       },
 
       setBranch: (id) => set({ currentBranchId: id }),

@@ -9,6 +9,9 @@
 
 @layer base {
   :root {
+    --font-sans: "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+    --font-arabic: "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+
     /* Page */
     --background: 42 38% 97%;
     --foreground: 150 16% 14%;
@@ -70,9 +73,9 @@
     --popover: 153 20% 11%;
     --popover-foreground: 42 29% 93%;
 
-    /* Warm Gold / Caramel */
-    --primary: 39 48% 67%;
-    --primary-foreground: 154 22% 10%;
+    /* NOVA sage green */
+    --primary: 148 31% 58%;
+    --primary-foreground: 154 28% 9%;
 
     --secondary: 153 15% 17%;
     --secondary-foreground: 42 29% 93%;
@@ -80,9 +83,9 @@
     --muted: 153 15% 16%;
     --muted-foreground: 42 12% 67%;
 
-    /* Dark Olive */
-    --accent: 39 22% 22%;
-    --accent-foreground: 42 45% 83%;
+    /* Soft forest accent */
+    --accent: 150 20% 20%;
+    --accent-foreground: 145 32% 82%;
 
     --destructive: 2 62% 49%;
     --destructive-foreground: 0 0% 100%;
@@ -93,7 +96,7 @@
     --border: 153 13% 23%;
     --input: 153 13% 25%;
 
-    --ring: 39 48% 67%;
+    --ring: 148 31% 58%;
   }
 }
 
@@ -177,14 +180,14 @@
     position: relative;
     isolation: isolate;
     background:
-      radial-gradient(ellipse at 50% 44%, hsl(42 45% 91% / 0.92), transparent 48%),
-      linear-gradient(145deg, hsl(40 35% 97%), hsl(34 42% 91%));
+      radial-gradient(ellipse at 50% 44%, hsl(151 39% 85% / 0.86), transparent 48%),
+      linear-gradient(145deg, hsl(42 38% 97%), hsl(149 26% 91%));
   }
 
   .dark .sanky-splash {
     background:
-      radial-gradient(ellipse at 50% 44%, hsl(30 26% 18% / 0.9), transparent 48%),
-      linear-gradient(145deg, hsl(24 20% 11%), hsl(20 25% 7%));
+      radial-gradient(ellipse at 50% 44%, hsl(151 38% 20% / 0.88), transparent 48%),
+      linear-gradient(145deg, hsl(154 27% 8%), hsl(153 25% 11%));
   }
 
   .sanky-splash-orb {
@@ -193,9 +196,9 @@
     width: min(68vw, 28rem);
     aspect-ratio: 1;
     border-radius: 9999px;
-    background: hsl(42 70% 56% / 0.12);
+    background: hsl(151 55% 48% / 0.18);
     filter: blur(72px);
-    animation: sanky-orb-breathe 3.2s ease-in-out infinite;
+    animation: sanky-orb-breathe 5.2s ease-in-out infinite;
   }
 
   .sanky-splash-mark {
@@ -205,34 +208,66 @@
     aspect-ratio: 1;
     place-items: center;
     border-radius: 9999px;
-    background: linear-gradient(145deg, hsl(151 30% 22%), hsl(153 30% 13%));
-    box-shadow: 0 18px 55px hsl(151 35% 12% / 0.24), inset 0 0 0 1px hsl(42 70% 78% / 0.24);
+    background: transparent;
+    box-shadow: none;
     animation: sanky-mark-arrive 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
 
   .sanky-splash-ring {
     position: absolute;
     inset: -0.6rem;
-    border: 1px solid hsl(38 55% 53% / 0.24);
+    border: 1px solid hsl(151 49% 46% / 0.26);
     border-radius: inherit;
   }
 
   .sanky-splash-ring-outer {
-    border-top-color: hsl(38 68% 54% / 0.95);
-    animation: sanky-ring-spin 1.8s linear infinite;
+    border-top-color: hsl(151 49% 46% / 0.9);
+    animation: sanky-ring-spin 3.6s linear infinite;
   }
 
   .sanky-splash-ring-inner {
     inset: -0.28rem;
-    border-color: hsl(38 55% 53% / 0.14);
+    border-color: hsl(151 49% 46% / 0.15);
   }
 
   .sanky-splash-wordmark {
-    border-radius: 1rem;
-    background: hsl(40 48% 96% / 0.92);
-    padding: 0.35rem 0.75rem;
-    box-shadow: 0 10px 35px hsl(24 28% 25% / 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
     animation: sanky-mark-arrive 850ms 100ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .sanky-splash-wordmark > span {
+    color: hsl(151 38% 22%);
+    font-family: "Segoe UI Variable", "Segoe UI", Tahoma, Arial, sans-serif;
+    font-size: 2rem;
+    font-weight: 750;
+    letter-spacing: 0.22em;
+  }
+
+  .sanky-splash-wordmark > small {
+    color: hsl(151 14% 48%);
+    font-family: "Segoe UI Variable", "Segoe UI", Tahoma, Arial, sans-serif;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+
+  .dark .sanky-splash-wordmark > span {
+    color: hsl(145 38% 88%);
+  }
+
+  .dark .sanky-splash-wordmark > small {
+    color: hsl(151 21% 67%);
+  }
+
+  .nova-splash-label {
+    color: hsl(151 18% 38%);
+  }
+
+  .dark .nova-splash-label {
+    color: hsl(151 18% 74%);
   }
 
   .sanky-splash-track {
@@ -240,7 +275,7 @@
     height: 3px;
     overflow: hidden;
     border-radius: 9999px;
-    background: hsl(34 20% 60% / 0.22);
+    background: hsl(151 26% 45% / 0.2);
   }
 
   .sanky-splash-track span {
@@ -248,7 +283,7 @@
     width: 42%;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, hsl(38 55% 50%), hsl(44 78% 67%));
+    background: linear-gradient(90deg, hsl(151 42% 31%), hsl(151 48% 55%));
     animation: sanky-progress 1.4s ease-in-out infinite;
   }
 
@@ -277,6 +312,508 @@
     .sanky-splash-ring-outer,
     .sanky-splash-wordmark,
     .sanky-splash-track span {
+      animation: none;
+    }
+  }
+
+  /* NOVA sign-in: calm motion, clear typography and the app's forest palette. */
+  .nova-login-scene {
+    --nova-forest: 151 38% 18%;
+    --nova-forest-deep: 153 35% 12%;
+    --nova-mint: 151 42% 39%;
+    position: relative;
+    isolation: isolate;
+    color: hsl(150 18% 14%);
+    font-family: "Segoe UI Variable", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+    background:
+      radial-gradient(ellipse at 12% 10%, hsl(151 42% 76% / 0.30), transparent 38%),
+      radial-gradient(ellipse at 90% 86%, hsl(42 56% 76% / 0.28), transparent 34%),
+      linear-gradient(135deg, hsl(42 38% 97%), hsl(149 25% 92%));
+  }
+
+  .dark .nova-login-scene {
+    color: hsl(42 29% 93%);
+    background:
+      radial-gradient(ellipse at 12% 10%, hsl(151 44% 25% / 0.35), transparent 38%),
+      radial-gradient(ellipse at 90% 86%, hsl(151 35% 21% / 0.30), transparent 36%),
+      linear-gradient(135deg, hsl(154 27% 8%), hsl(153 25% 11%));
+  }
+
+  .nova-login-grid {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    opacity: 0.25;
+    background-image: linear-gradient(hsl(151 30% 42% / 0.07) 1px, transparent 1px), linear-gradient(90deg, hsl(151 30% 42% / 0.07) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: radial-gradient(ellipse at center, black 12%, transparent 76%);
+  }
+
+  .nova-login-orb {
+    position: absolute;
+    z-index: -1;
+    width: clamp(14rem, 31vw, 27rem);
+    aspect-ratio: 1;
+    border-radius: 9999px;
+    filter: blur(72px);
+    pointer-events: none;
+    will-change: transform;
+  }
+
+  .nova-login-orb-one {
+    top: -15%;
+    left: -7%;
+    background: hsl(151 48% 57% / 0.17);
+    animation: nova-orb-drift-one 18s ease-in-out infinite alternate;
+  }
+
+  .nova-login-orb-two {
+    right: -8%;
+    bottom: -26%;
+    background: hsl(42 58% 66% / 0.19);
+    animation: nova-orb-drift-two 22s ease-in-out infinite alternate;
+  }
+
+  .nova-login-orb-three {
+    top: 42%;
+    left: 46%;
+    width: clamp(9rem, 18vw, 17rem);
+    background: hsl(165 50% 56% / 0.11);
+    animation: nova-orb-drift-three 16s ease-in-out infinite alternate;
+  }
+
+  .nova-login-shell {
+    display: grid;
+    grid-template-columns: minmax(16rem, 0.88fr) minmax(22rem, 1.12fr);
+    max-width: 62rem;
+    min-height: 32rem;
+    overflow: hidden;
+    border: 1px solid hsl(151 25% 44% / 0.16);
+    border-radius: 1.8rem;
+    background: hsl(0 0% 100% / 0.62);
+    box-shadow: 0 34px 100px -44px hsl(153 35% 12% / 0.42), 0 2px 8px hsl(153 35% 12% / 0.06);
+    backdrop-filter: blur(24px);
+    animation: nova-card-arrive 650ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+  }
+
+  .dark .nova-login-shell {
+    border-color: hsl(151 23% 60% / 0.13);
+    background: hsl(153 24% 10% / 0.68);
+    box-shadow: 0 34px 100px -44px hsl(0 0% 0% / 0.75), 0 2px 8px hsl(0 0% 0% / 0.22);
+  }
+
+  .nova-login-brand {
+    min-height: 32rem;
+    background:
+      radial-gradient(circle at 80% 65%, hsl(151 47% 36% / 0.7), transparent 38%),
+      linear-gradient(148deg, hsl(var(--nova-forest)), hsl(var(--nova-forest-deep)) 78%);
+  }
+
+  .nova-login-brand-glow {
+    position: absolute;
+    inset: 0;
+    opacity: 0.5;
+    background-image: linear-gradient(135deg, transparent 47%, hsl(0 0% 100% / 0.055) 47.2%, transparent 47.6%), linear-gradient(35deg, transparent 63%, hsl(0 0% 100% / 0.04) 63.2%, transparent 63.6%);
+    background-size: 100% 100%;
+    pointer-events: none;
+  }
+
+  .nova-login-mark {
+    display: grid;
+    width: 3.2rem;
+    aspect-ratio: 1;
+    place-items: center;
+    flex: 0 0 auto;
+    background: transparent;
+  }
+
+  .nova-login-mark img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .nova-login-mark-small {
+    width: 2.5rem;
+  }
+
+  .nova-login-mark-loading {
+    width: 4.2rem;
+    animation: nova-mark-float 2.4s ease-in-out infinite;
+  }
+
+  .nova-login-brand-visual {
+    position: absolute;
+    right: 1rem;
+    bottom: 3.6rem;
+    display: grid;
+    width: 14rem;
+    aspect-ratio: 1;
+    place-items: center;
+    opacity: 0.92;
+    pointer-events: none;
+  }
+
+  .nova-login-visual-orbit {
+    position: absolute;
+    border: 1px solid hsl(155 66% 80% / 0.27);
+    border-radius: 50%;
+  }
+
+  .nova-login-visual-orbit-one {
+    inset: 0.2rem;
+    animation: nova-orbit-rotate 24s linear infinite;
+  }
+
+  .nova-login-visual-orbit-two {
+    inset: 1.65rem;
+    border-style: dashed;
+    opacity: 0.7;
+    animation: nova-orbit-rotate 32s linear infinite reverse;
+  }
+
+  .nova-login-visual-core {
+    display: block;
+    width: 7rem;
+    aspect-ratio: 1;
+    filter: drop-shadow(0 0 22px hsl(151 58% 62% / 0.18));
+    animation: nova-mark-float 4.2s ease-in-out infinite;
+  }
+
+  .nova-login-visual-core img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .nova-login-visual-caption {
+    position: absolute;
+    bottom: 1.35rem;
+    color: hsl(151 55% 88% / 0.65);
+    font-size: 0.62rem;
+    letter-spacing: 0.55em;
+  }
+
+  .nova-login-panel {
+    min-width: 0;
+    align-self: center;
+    color: hsl(var(--foreground));
+  }
+
+  .nova-login-kicker {
+    color: hsl(151 35% 34%);
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.17em;
+    line-height: 1.5;
+  }
+
+  .dark .nova-login-kicker {
+    color: hsl(151 44% 67%);
+  }
+
+  .nova-login-title {
+    position: relative;
+    z-index: 0;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0;
+    font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    font-weight: 760;
+    letter-spacing: -0.055em;
+    line-height: 1.16;
+    color: hsl(151 38% 18%);
+    animation: nova-title-arrive 700ms 100ms both;
+  }
+
+  .nova-login-title::before {
+    position: absolute;
+    z-index: -1;
+    right: -0.3em;
+    bottom: 0.05em;
+    left: -0.24em;
+    height: 0.32em;
+    border-radius: 9999px;
+    background: linear-gradient(90deg, hsl(151 48% 57% / 0.14), hsl(42 68% 63% / 0.22));
+    content: "";
+    filter: blur(8px);
+    animation: nova-title-glow 4.8s ease-in-out infinite alternate;
+  }
+
+  .dark .nova-login-title {
+    color: hsl(145 38% 88%);
+  }
+
+  .nova-login-stepbar {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .nova-login-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    font-size: 0.72rem;
+    font-weight: 650;
+  }
+
+  .nova-login-step > span {
+    display: grid;
+    width: 1.65rem;
+    aspect-ratio: 1;
+    place-items: center;
+    border: 1px solid hsl(var(--border));
+    border-radius: 50%;
+    font-size: 0.62rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nova-login-step-active {
+    color: hsl(151 38% 27%);
+  }
+
+  .nova-login-step-active > span {
+    border-color: hsl(151 39% 32% / 0.25);
+    background: hsl(151 39% 32% / 0.1);
+  }
+
+  .dark .nova-login-step-active {
+    color: hsl(151 48% 70%);
+  }
+
+  .nova-login-step-line {
+    width: 2.2rem;
+    height: 1px;
+    background: hsl(var(--border));
+  }
+
+  .nova-login-tools {
+    border: 1px solid hsl(var(--border) / 0.8);
+    background: hsl(var(--card) / 0.72);
+    box-shadow: 0 8px 28px hsl(var(--foreground) / 0.07);
+    backdrop-filter: blur(14px);
+  }
+
+  .nova-login-tools button {
+    border-color: transparent;
+    background: transparent;
+    color: hsl(var(--foreground));
+  }
+
+  .nova-login-tools button:hover {
+    background: hsl(var(--primary) / 0.1);
+  }
+
+  .nova-login-panel input {
+    border-color: hsl(var(--border));
+    background: hsl(var(--background) / 0.76);
+    font-family: "Segoe UI Variable", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+    transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  }
+
+  .nova-login-panel input:focus {
+    border-color: hsl(151 38% 38% / 0.62);
+    box-shadow: 0 0 0 4px hsl(151 38% 38% / 0.11);
+  }
+
+  .dark .nova-login-panel input:focus {
+    border-color: hsl(151 43% 58% / 0.72);
+    box-shadow: 0 0 0 4px hsl(151 43% 58% / 0.13);
+  }
+
+  .nova-login-scene .nova-login-submit {
+    border: 1px solid hsl(151 45% 27% / 0.35);
+    background: linear-gradient(135deg, hsl(151 39% 27%), hsl(155 42% 34%));
+    color: white;
+    font-family: "Segoe UI Variable", "Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+    font-size: 0.94rem;
+    font-weight: 700;
+    letter-spacing: 0.015em;
+    box-shadow: 0 10px 22px hsl(151 36% 24% / 0.2), inset 0 1px 0 hsl(0 0% 100% / 0.18);
+    transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  }
+
+  .nova-login-scene .nova-login-submit:hover:not(:disabled) {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 26px hsl(151 36% 24% / 0.26), inset 0 1px 0 hsl(0 0% 100% / 0.18);
+  }
+
+  .nova-login-scene .nova-login-submit:active:not(:disabled) {
+    transform: translateY(0) scale(0.99);
+  }
+
+  .dark .nova-login-scene .nova-login-submit {
+    border-color: hsl(151 45% 62% / 0.25);
+    background: linear-gradient(135deg, hsl(151 42% 34%), hsl(155 45% 42%));
+    box-shadow: 0 10px 26px hsl(151 45% 20% / 0.28), inset 0 1px 0 hsl(0 0% 100% / 0.15);
+  }
+
+  .nova-login-key {
+    border: 1px solid hsl(151 29% 48% / 0.2);
+    background: hsl(151 40% 96% / 0.82);
+    color: hsl(151 40% 20%);
+  }
+
+  .nova-login-key:hover {
+    border-color: hsl(151 37% 40% / 0.42);
+    background: hsl(151 38% 91%);
+  }
+
+  .dark .nova-login-key {
+    border-color: hsl(151 28% 70% / 0.15);
+    background: hsl(151 28% 22% / 0.72);
+    color: hsl(145 38% 89%);
+  }
+
+  .dark .nova-login-key:hover {
+    background: hsl(151 30% 28% / 0.9);
+  }
+
+  .nova-pin-dot-active {
+    border-color: hsl(151 40% 35%);
+    background: hsl(151 40% 35%);
+  }
+
+  .dark .nova-pin-dot-active {
+    border-color: hsl(151 44% 61%);
+    background: hsl(151 44% 61%);
+  }
+
+  .nova-login-loader {
+    width: 3.5rem;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 9999px;
+    background: hsl(151 32% 40% / 0.18);
+  }
+
+  .nova-login-loader::after {
+    display: block;
+    width: 44%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(151 40% 32%), hsl(151 49% 57%));
+    content: "";
+    animation: sanky-progress 1.35s ease-in-out infinite;
+  }
+
+  @keyframes nova-orb-drift-one {
+    to { transform: translate3d(12vw, 6vh, 0) scale(1.13); }
+  }
+
+  @keyframes nova-orb-drift-two {
+    to { transform: translate3d(-10vw, -7vh, 0) scale(0.88); }
+  }
+
+  @keyframes nova-orb-drift-three {
+    to { transform: translate3d(5vw, -8vh, 0) scale(1.16); }
+  }
+
+  @keyframes nova-orbit-rotate {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes nova-card-arrive {
+    from { opacity: 0; transform: translateY(14px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes nova-title-arrive {
+    from { opacity: 0; transform: translateY(7px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes nova-title-glow {
+    from { opacity: 0.55; transform: scaleX(0.91); }
+    to { opacity: 1; transform: scaleX(1.04); }
+  }
+
+  @keyframes nova-mark-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+  }
+
+  @media (max-width: 767px) {
+    .nova-login-shell {
+      display: block;
+      max-width: 31rem;
+      min-height: 0;
+      border-radius: 1.5rem;
+    }
+
+    .nova-login-panel {
+      padding: 1.5rem;
+    }
+
+    .nova-login-title {
+      font-size: clamp(1.9rem, 8vw, 2.35rem);
+    }
+
+    .nova-login-scene main {
+      scrollbar-width: none;
+    }
+
+    .nova-login-scene main::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  @media (max-height: 700px) and (min-width: 768px) {
+    .nova-login-shell,
+    .nova-login-brand {
+      min-height: 25rem;
+    }
+
+    .nova-login-brand > .relative.z-10 > .mt-16 {
+      margin-top: 2rem;
+    }
+
+    .nova-login-brand-visual {
+      width: 9rem;
+    }
+
+    .nova-login-scene > header {
+      padding-block: 0.5rem;
+    }
+
+    .nova-login-scene main {
+      padding-bottom: 0;
+    }
+
+    .nova-login-scene .nova-login-panel {
+      padding: 0.65rem 2rem;
+    }
+
+    .nova-login-panel > .mb-6 {
+      margin-bottom: 0.6rem;
+    }
+
+    .nova-login-stepbar {
+      margin-bottom: 0.4rem !important;
+    }
+
+    .nova-login-panel input {
+      height: 2.7rem;
+    }
+
+    .nova-login-panel .nova-login-form > :not([hidden]) ~ :not([hidden]) {
+      margin-block-start: 0.45rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nova-login-orb,
+    .nova-login-visual-orbit,
+    .nova-login-mark-loading,
+    .nova-login-scene .nova-login-shell,
+    .nova-login-title,
+    .nova-login-title::before,
+    .nova-login-loader::after {
       animation: none;
     }
   }

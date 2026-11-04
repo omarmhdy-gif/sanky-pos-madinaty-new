@@ -40,7 +40,7 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   const digest = await sha256(rawCode);
-  const { data: claimedAccount, error: claimError } = await admin.rpc("platform_claim_device_license", {
+  const { data: claim, error: claimError } = await admin.rpc("platform_claim_device_license_v2", {
     p_account_number: accountNumber,
     p_code_digest: digest,
     p_device_uuid: deviceUuid,
@@ -55,7 +55,14 @@ Deno.serve(async (request) => {
     console.error("Device license claim failed.", claimError.message);
     return reply(503, { error: "تعذر إكمال تفعيل الكود حاليًا." });
   }
-  if (claimedAccount !== accountNumber) return reply(403, { error: "تعذر ربط كود التفعيل بحساب المحل." });
+  const claimResult = claim as { accountNumber?: string; branchId?: string | null; deviceName?: string | null } | null;
+  if (claimResult?.accountNumber !== accountNumber) {
+    return reply(403, { error: "تعذر ربط كود التفعيل بحساب المحل وفرعه." });
+  }
 
-  return reply(200, { accountNumber: claimedAccount });
+  return reply(200, {
+    accountNumber: claimResult.accountNumber,
+    branchId: claimResult.branchId ?? null,
+    deviceName: claimResult.deviceName,
+  });
 });

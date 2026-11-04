@@ -29,6 +29,25 @@ try {
     if ($configuration -notmatch [regex]::Escape($marker)) {
       throw "The Sanky Assigned Access profile marker is missing."
     }
+
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+      $currentXml = [xml]$current
+      $requestedXml = [xml]$configuration
+      $currentAccount = $currentXml.SelectSingleNode("//*[local-name()='Config']/*[local-name()='Account']")
+      $requestedAccount = $requestedXml.SelectSingleNode("//*[local-name()='Config']/*[local-name()='Account']")
+      $currentApp = $currentXml.SelectSingleNode("//*[local-name()='KioskModeApp']")
+      $requestedApp = $requestedXml.SelectSingleNode("//*[local-name()='KioskModeApp']")
+      $classicAppAttribute = $currentApp.Attributes | Where-Object { $_.LocalName -eq "ClassicAppPath" } | Select-Object -First 1
+      $requestedClassicAppAttribute = $requestedApp.Attributes | Where-Object { $_.LocalName -eq "ClassicAppPath" } | Select-Object -First 1
+
+      if ($currentAccount -and $requestedAccount -and $classicAppAttribute -and $requestedClassicAppAttribute -and
+          [string]::Equals($currentAccount.InnerText.Trim(), $requestedAccount.InnerText.Trim(), [StringComparison]::OrdinalIgnoreCase) -and
+          [string]::Equals($classicAppAttribute.Value.Trim(), $requestedClassicAppAttribute.Value.Trim(), [StringComparison]::OrdinalIgnoreCase)) {
+        [IO.File]::WriteAllText($ResultPath, '{"ok":true}', [Text.Encoding]::UTF8)
+        exit 0
+      }
+    }
+
     $instance.Configuration = [System.Net.WebUtility]::HtmlEncode($configuration)
     Set-CimInstance -CimInstance $instance -ErrorAction Stop | Out-Null
   } elseif (-not [string]::IsNullOrWhiteSpace($current)) {

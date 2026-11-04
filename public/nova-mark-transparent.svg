@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="nova-mark" x1="218" y1="220" x2="810" y2="835" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#B9D8AE" />
+      <stop offset=".55" stop-color="#91BE9C" />
+      <stop offset="1" stop-color="#6F9F7D" />
+    </linearGradient>
+  </defs>
+  <path d="M217 764V260C217 217 268 196 298 225L726 642C756 671 807 650 807 607V260" stroke="url(#nova-mark)" stroke-width="113" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="217" cy="890" r="30" fill="#D6B77B" />
+</svg>

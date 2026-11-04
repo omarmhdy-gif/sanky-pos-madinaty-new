@@ -1,0 +1,11 @@
+[functions.platform-provision-business]
+verify_jwt = true
+
+[functions.shop-license-status]
+# This function verifies either the POS access token itself or the legacy
+# account-0000 desktop exception before reading anything from the central DB.
+verify_jwt = false
+
+[functions.platform-device-console]
+# The function validates the POS token against the tenant Auth project itself.
+verify_jwt = false

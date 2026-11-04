@@ -47,6 +47,9 @@ Deno.serve(async (request) => {
   });
   const claimBody = await claimResponse.json().catch(() => ({}));
   if (!claimResponse.ok) return reply(claimResponse.status, { error: typeof claimBody.error === "string" ? claimBody.error : "كود التفعيل غير صالح." });
+  const assignedBranchId = typeof claimBody.branchId === "string" ? claimBody.branchId : null;
+  const assignedDeviceName = typeof claimBody.deviceName === "string" ? claimBody.deviceName.trim().slice(0, 80) : "";
+  const resolvedDeviceName = assignedDeviceName || deviceName || `Cashier ${deviceUuid.slice(0, 8)}`;
 
   const service = createClient(posUrl, posService, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -65,18 +68,21 @@ Deno.serve(async (request) => {
       user_metadata: {
         account_number: accountNumber,
         device_uuid: deviceUuid,
-        device_name: deviceName || `Cashier ${deviceUuid.slice(0, 8)}`,
+        device_name: resolvedDeviceName,
+        ...(assignedBranchId ? { branch_id: assignedBranchId } : {}),
         role: "cashier_device",
       },
     });
     if (createError || !created.user) throw createError ?? new Error("Could not create device identity.");
     authUserId = created.user.id;
 
-    const { data: branchId, error: registrationError } = await service.rpc("register_shop_device", {
+    const registrationArgs: Record<string, string> = {
       p_account_number: accountNumber,
       p_device_uuid: deviceUuid,
       p_auth_user_id: authUserId,
-    });
+    };
+    if (assignedBranchId) registrationArgs.p_branch_id = assignedBranchId;
+    const { data: branchId, error: registrationError } = await service.rpc("register_shop_device", registrationArgs);
     if (registrationError || typeof branchId !== "string") throw registrationError ?? new Error("Could not bind device to a branch.");
 
     const { data: signedIn, error: signInError } = await auth.auth.signInWithPassword({ email, password });

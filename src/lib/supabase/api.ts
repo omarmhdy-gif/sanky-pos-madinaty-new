@@ -86,6 +86,11 @@ export async function fetchBranches(): Promise<Branch[]> {
   return unwrap(res).map(fromBranchRow);
 }
 
+export async function updateBranchName(id: string, name: Branch["name"]): Promise<Branch> {
+  const res = await supabase.from("branches").update({ name }).eq("id", id).select("*").single();
+  return fromBranchRow(unwrap(res));
+}
+
 export async function fetchSettings(branchId: string): Promise<ShopSettings> {
   const res = await supabase.from("shop_settings").select("*").eq("branch_id", branchId).single();
   return fromSettingsRow(unwrap(res));

@@ -41,7 +41,7 @@ Deno.serve(async (request) => {
   const bearer = request.headers.get("Authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null;
   let ownerEmail: string | null = null;
   let validDeviceSession = false;
-  let deviceIdentity: { uuid: string; name: string } | null = null;
+  let deviceIdentity: { uuid: string; name: string; branchId: string | null } | null = null;
 
   if (bearer && bearer !== "legacy-desktop") {
     const posUserClient = createClient(posUrl, posAnonKey, {
@@ -56,10 +56,11 @@ Deno.serve(async (request) => {
     validDeviceSession = !deviceError && deviceValid === true;
     if (validDeviceSession) {
       const metadata = authData.user.user_metadata ?? {};
+      const branchId = typeof metadata.branch_id === "string" ? metadata.branch_id : null;
       const uuid = typeof metadata.device_uuid === "string" ? metadata.device_uuid : "";
       if (/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid)) {
         const name = typeof metadata.device_name === "string" ? metadata.device_name.trim().slice(0, 80) : "";
-        deviceIdentity = { uuid, name: name || `Cashier ${uuid.slice(0, 8)}` };
+        deviceIdentity = { uuid, name: name || `Cashier ${uuid.slice(0, 8)}`, branchId };
       }
     }
     if (!validDeviceSession) {
@@ -98,6 +99,7 @@ Deno.serve(async (request) => {
     const { error: heartbeatError } = await centralService.from("platform_devices").upsert({
       shop_id: data.id,
       device_uuid: deviceIdentity.uuid,
+      branch_id: deviceIdentity.branchId,
       device_name: deviceIdentity.name,
       last_sync_at: new Date().toISOString(),
     }, { onConflict: "shop_id,device_uuid" });

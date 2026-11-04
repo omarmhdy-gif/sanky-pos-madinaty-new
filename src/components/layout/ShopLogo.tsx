@@ -27,14 +27,13 @@ export function ShopLogo({ className }: { className?: string }) {
   }
 
   return (
-    <div className={cn("relative flex items-center justify-center overflow-hidden bg-neutral-950", className)}>
+    <div className={cn("relative flex items-center justify-center overflow-hidden bg-transparent", className)}>
       <img
-        src="/sanky-logo.jpg"
+        src="/nova-mark-transparent.svg"
         alt=""
-        className="absolute inset-0 h-full w-full max-w-none object-cover"
-        style={{ transform: "translate(4px, 12px) scale(2.8)" }}
+        className="h-full w-full object-contain"
       />
-      <span className="sr-only">Sanky</span>
+      <span className="sr-only">NOVA</span>
     </div>
   );
 }

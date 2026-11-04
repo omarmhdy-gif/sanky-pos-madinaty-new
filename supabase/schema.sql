@@ -938,7 +938,7 @@ create or replace function public._sanky_consume_inventory_item(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $function$
 declare
@@ -1026,7 +1026,7 @@ create or replace function public._sanky_produce_inventory_item(
 )
 returns jsonb
 language plpgsql
-security definer
+security invoker
 set search_path = public
 as $function$
 declare
@@ -1112,8 +1112,10 @@ begin
 end;
 $function$;
 
-revoke all on function public._sanky_consume_inventory_item(text, text, numeric, text, text, text, text, timestamptz, text[], boolean) from public, anon, authenticated;
-revoke all on function public._sanky_produce_inventory_item(text, text, numeric, text, text, text, timestamptz, text[], boolean) from public, anon, authenticated;
+revoke all on function public._sanky_consume_inventory_item(text, text, numeric, text, text, text, text, timestamptz, text[], boolean) from public, anon;
+revoke all on function public._sanky_produce_inventory_item(text, text, numeric, text, text, text, timestamptz, text[], boolean) from public, anon;
+grant execute on function public._sanky_consume_inventory_item(text, text, numeric, text, text, text, text, timestamptz, text[], boolean) to authenticated;
+grant execute on function public._sanky_produce_inventory_item(text, text, numeric, text, text, text, timestamptz, text[], boolean) to authenticated;
 
 create or replace function public.manufacture_inventory_item(
   p_branch_id text,
@@ -1133,6 +1135,9 @@ declare
 begin
   if p_branch_id is null or p_inventory_item_id is null or p_quantity is null or p_quantity <= 0 then
     raise exception 'Branch, inventory item and a positive quantity are required';
+  end if;
+  if not private.shop_branch_accessible(p_branch_id) then
+    raise exception 'You do not have access to this branch';
   end if;
   v_result := public._sanky_produce_inventory_item(
     p_branch_id, p_inventory_item_id, p_quantity, p_employee_id,

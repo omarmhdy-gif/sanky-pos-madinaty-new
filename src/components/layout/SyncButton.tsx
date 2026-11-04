@@ -141,14 +141,14 @@ export function SyncButton() {
       <Dialog open={Boolean(availableVersion)} onOpenChange={(open) => { if (!open && !downloadingUpdate) setAvailableVersion(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{isArabic ? `يتوفر تحديث للبرنامج ${availableVersion ?? ""}` : `Sanky POS update ${availableVersion ?? ""} is available`}</DialogTitle>
+            <DialogTitle>{isArabic ? `يتوفر تحديث لنوفا ${availableVersion ?? ""}` : `NOVA update ${availableVersion ?? ""} is available`}</DialogTitle>
             <DialogDescription>
               {pendingSales > 0
                 ? (isArabic ? `لديك ${pendingSales} طلب بيع غير مرسل. أرسلها أولًا قبل إعادة تشغيل البرنامج.` : `${pendingSales} sale(s) are waiting to sync. Send them before restarting the app.`)
                 : downloadingUpdate
                   ? (isArabic ? `جاري تنزيل التحديث: ${downloadProgress}%` : `Downloading update: ${downloadProgress}%`)
                   : updateDownloaded
-                    ? (isArabic ? "التحديث جاهز. إعادة التشغيل ستغلق البرنامج وتثبت النسخة الجديدة." : "The update is ready. Restarting will close Sanky and install the new version.")
+                    ? (isArabic ? "التحديث جاهز. إعادة التشغيل ستغلق البرنامج وتثبت النسخة الجديدة." : "The update is ready. Restarting will close NOVA and install the new version.")
                     : (isArabic ? "سيتم تنزيل تحديث البرنامج. قد يطلب ويندوز موافقة المسؤول عند التثبيت." : "The app update will download. Windows may request administrator approval to install it.")}
             </DialogDescription>
           </DialogHeader>

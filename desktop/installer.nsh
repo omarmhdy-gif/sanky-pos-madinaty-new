@@ -5,7 +5,7 @@
     MessageBox MB_ICONSTOP|MB_OK "Sanky could not configure its dedicated Windows POS account. The setup error was logged to C:\ProgramData\SankyPOS\cashier-setup.log. Please send that log file so the exact cause can be fixed."
     Abort
   ${EndIf}
-  MessageBox MB_ICONINFORMATION|MB_OK "The Sanky Windows account now opens only the POS app. Press Ctrl+Alt+Delete and choose Switch user to use Windows with your normal account. Restart Windows to start Sanky automatically."
+  MessageBox MB_ICONINFORMATION|MB_OK "The Windows account SankyCashier is ready with password 0000. Sign in to that account from the Windows sign-in screen to open only the Sanky POS app. To return to your normal Windows account, press Ctrl+Alt+Delete and choose Switch user. The installer will now close without opening Sanky POS."
 !macroend
 
 !macro customUnInstall

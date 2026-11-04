@@ -1,12 +1,10 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n";
-import { ShopLogo, useShopLogoUrl } from "@/components/layout/ShopLogo";
 
 export function BrandSplash() {
   const { locale } = useI18n();
-  const logo = useShopLogoUrl();
-  const label = locale === "ar" ? "جارٍ تجهيز البرنامج" : "Preparing Sanky POS";
+  const label = locale === "ar" ? "جارٍ تشغيل نوفا" : "Starting NOVA";
 
   return (
     <main className="sanky-splash flex h-app w-full items-center justify-center overflow-hidden px-6" role="status" aria-live="polite" aria-label={label}>
@@ -15,15 +13,14 @@ export function BrandSplash() {
         <div className="sanky-splash-mark" aria-hidden="true">
           <span className="sanky-splash-ring sanky-splash-ring-outer" />
           <span className="sanky-splash-ring sanky-splash-ring-inner" />
-          {logo ? (
-            <ShopLogo className="h-24 w-24 rounded-2xl" />
-          ) : (
-            <img src="/sanky-brand-mark.png" alt="" className="h-[4.5rem] w-[4.5rem] object-contain" />
-          )}
+          <img src="/nova-mark-transparent.svg" alt="" className="h-[4.5rem] w-[4.5rem] object-contain" />
         </div>
-        {logo ? null : <img src="/sanky-brand-lockup.png" alt="SANKY" className="sanky-splash-wordmark mt-5 h-auto w-[min(82vw,18rem)] object-contain" />}
-        <p className="mt-5 text-sm font-medium tracking-wide text-stone-600 dark:text-stone-300">
-          {locale === "ar" ? "بنجهّز مساحة العمل…" : "Getting your workspace ready…"}
+        <div className="sanky-splash-wordmark mt-5">
+          <span>NOVA</span>
+          <small>Next-Gen Operations · Virtual Automation</small>
+        </div>
+        <p className="nova-splash-label mt-5 text-sm font-medium tracking-wide">
+          {locale === "ar" ? "جارٍ تشغيل نوفا…" : "Starting NOVA…"}
         </p>
         <div className="sanky-splash-track mt-4" aria-hidden="true">
           <span />
