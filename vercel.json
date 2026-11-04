@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "sanky-pos-madinaty-new.vercel.app"
+        }
+      ],
+      "destination": "https://nova-pos-omarmhdy-5546.vercel.app/:path*",
+      "permanent": true
+    }
+  ]
+}
