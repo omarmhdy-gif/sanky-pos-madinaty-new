@@ -186,7 +186,7 @@ export function PosOrdersDialog({ open, onOpenChange }: { open: boolean; onOpenC
                     </span>
                     <span className="flex items-center justify-between gap-3 sm:justify-end">
                       <span className="text-sm font-bold text-primary">{formatMoney(order.total, currencySymbol)}</span>
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><ShoppingBag className="h-3.5 w-3.5" />{order.payment.method}</span>
+                      {order.status !== "voided" && <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><ShoppingBag className="h-3.5 w-3.5" />{order.payment.method}</span>}
                     </span>
                   </button>
                 );

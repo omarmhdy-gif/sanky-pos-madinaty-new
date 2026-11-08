@@ -22,6 +22,7 @@ import { useAuthStore } from "@/lib/store/useAuthStore";
 import { cacheShopLogo } from "@/lib/store/shopLogoCache";
 import { loadPosSnapshot, savePosSnapshot } from "@/lib/store/offlineSnapshot";
 import { hasPermission, NEW_EMPLOYEE_DEFAULT_PERMISSIONS } from "@/lib/permissions";
+import { DEFAULT_ORDER_CANCELLATION_SETTINGS } from "@/lib/orderCancellation";
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -113,6 +114,7 @@ interface DataStore extends AppData {
   // it was actually sold in, not whichever branch happens to be selected
   // on this till at the moment connectivity returns.
   addOrder: (o: Omit<Order, "id" | "orderNumber" | "branchId">, branchIdOverride?: string) => Promise<Order>;
+  recordDraftCancellation: (o: Omit<Order, "id" | "orderNumber" | "branchId">, approvalPin?: string) => Promise<Order>;
   refundOrder: (id: string) => Promise<boolean>;
   fetchOrdersInRange: (from: Date, to: Date) => Promise<void>;
   // One page of orders (newest first), merged into `orders` the same
@@ -142,6 +144,7 @@ const EMPTY_SETTINGS: ShopSettings = {
   taxEnabled: false,
   locale: "en",
   theme: "light",
+  orderCancellation: DEFAULT_ORDER_CANCELLATION_SETTINGS,
 };
 
 export const useDataStore = create<DataStore>()((set, get) => {
@@ -563,6 +566,11 @@ export const useDataStore = create<DataStore>()((set, get) => {
       }),
       stockMovements: [...stockMovementUpdates, ...state.stockMovements.filter((movement) => !stockMovementUpdates.some((added) => added.id === movement.id))],
     }));
+    return created;
+  },
+  recordDraftCancellation: async (o, approvalPin) => {
+    const created = await api.recordDraftCancellation({ ...o, branchId: requireBranchId() }, approvalPin);
+    set((state) => ({ orders: [created, ...state.orders.filter((order) => order.id !== created.id)] }));
     return created;
   },
   refundOrder: async (id) => {

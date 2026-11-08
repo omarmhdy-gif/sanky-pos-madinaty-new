@@ -46,12 +46,12 @@ export function Sidebar({ collapsed }: { collapsed: boolean }) {
               aria-current={active ? "page" : undefined}
             >
               <span className={cn(
-                "relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] transition-all duration-200",
+                "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] transition-all duration-200",
                 active
                   ? "bg-[hsl(148_40%_43%/0.24)] text-[hsl(148_68%_76%)] ring-1 ring-white/[0.08]"
                   : "bg-white/[0.025] text-white/65 shadow-[inset_0_1px_0_hsl(0_0%_100%/0.035)] ring-1 ring-white/[0.035] transition-transform group-hover:scale-[1.04] group-hover:bg-[hsl(148_28%_50%/0.11)] group-hover:text-[hsl(145_42%_84%)] group-hover:ring-[hsl(148_40%_75%/0.12)]"
               )}>
-                <Icon className="h-[22px] w-[22px] drop-shadow-sm" strokeWidth={active ? 2.1 : 1.9} />
+                <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2 : 1.8} />
               </span>
               {!collapsed && <span className="min-w-0 truncate">{t.nav[item.key]}</span>}
             </Link>

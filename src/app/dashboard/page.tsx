@@ -71,96 +71,81 @@ const metricStyles: Record<
   {
     label: string;
     value: string;
+    dot: string;
     surface: string;
-    bar: string;
-    glow: string;
     border: string;
-    shadow: string;
-    bottom: string;
+    hoverBorder: string;
+    hoverShadow: string;
   }
 > = {
   brown: {
-    label: "text-[#704522] dark:text-[#d9b58e]",
+    label: "group-hover:text-[#704522] dark:group-hover:text-[#d9b58e]",
     value: "text-[#704522] dark:text-[#d9b58e]",
-    surface: "from-[#f3e7da]/90 dark:from-[#392b20]/60",
-    bar: "from-[#704522] via-[#b99674] to-transparent dark:from-[#d9b58e]",
-    glow: "bg-[#704522]/10 dark:bg-[#d9b58e]/10",
-    border: "hover:border-[#b99674] dark:hover:border-[#8c6848]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(112,69,34,0.14)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#704522] dark:bg-[#d9b58e]",
+    dot: "bg-[#b99674] dark:bg-[#d9b58e]",
+    surface: "from-[#f0deca]/95 dark:from-[#392b20]/65",
+    border: "border-[#d2bea6] dark:border-[#4a3727]/80",
+    hoverBorder: "hover:border-[#b99674] dark:hover:border-[#8c6848]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(112,69,34,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 
   green: {
-    label: "text-[#628044] dark:text-[#a8c487]",
+    label: "group-hover:text-[#628044] dark:group-hover:text-[#a8c487]",
     value: "text-[#628044] dark:text-[#a8c487]",
-    surface: "from-[#e7efdf]/90 dark:from-[#303a28]/65",
-    bar: "from-[#628044] via-[#9dbb80] to-transparent dark:from-[#a8c487]",
-    glow: "bg-[#628044]/10 dark:bg-[#a8c487]/10",
-    border: "hover:border-[#9dbb80] dark:hover:border-[#6f8d52]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(98,128,68,0.13)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#628044] dark:bg-[#a8c487]",
+    dot: "bg-[#82a460] dark:bg-[#a8c487]",
+    surface: "from-[#dfead3]/95 dark:from-[#303a28]/70",
+    border: "border-[#c1d2ad] dark:border-[#455438]/80",
+    hoverBorder: "hover:border-[#82a460] dark:hover:border-[#6f8d52]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(98,128,68,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 
   orange: {
-    label: "text-[#b16c08] dark:text-[#f0ad55]",
+    label: "group-hover:text-[#b16c08] dark:group-hover:text-[#f0ad55]",
     value: "text-[#b16c08] dark:text-[#f0ad55]",
-    surface: "from-[#fff1dc]/90 dark:from-[#403521]/65",
-    bar: "from-[#dd8711] via-[#f0ad55] to-transparent dark:from-[#f0ad55]",
-    glow: "bg-[#dd8711]/10 dark:bg-[#f0ad55]/10",
-    border: "hover:border-[#e8b15e] dark:hover:border-[#a9783c]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(221,135,17,0.13)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#dd8711] dark:bg-[#f0ad55]",
+    dot: "bg-[#dd8711] dark:bg-[#f0ad55]",
+    surface: "from-[#ffebc9]/95 dark:from-[#403521]/70",
+    border: "border-[#ebd4a9] dark:border-[#5a482a]/80",
+    hoverBorder: "hover:border-[#e8b15e] dark:hover:border-[#a9783c]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(221,135,17,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 
   blue: {
-    label: "text-[#138bc9] dark:text-[#65b9e3]",
+    label: "group-hover:text-[#138bc9] dark:group-hover:text-[#65b9e3]",
     value: "text-[#138bc9] dark:text-[#65b9e3]",
-    surface: "from-[#e4f3fa]/90 dark:from-[#263943]/65",
-    bar: "from-[#138bc9] via-[#65b9e3] to-transparent dark:from-[#65b9e3]",
-    glow: "bg-[#138bc9]/10 dark:bg-[#65b9e3]/10",
-    border: "hover:border-[#82c5e5] dark:hover:border-[#467d99]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(19,139,201,0.13)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#138bc9] dark:bg-[#65b9e3]",
+    dot: "bg-[#138bc9] dark:bg-[#65b9e3]",
+    surface: "from-[#d9edf7]/95 dark:from-[#263943]/70",
+    border: "border-[#bfdeed] dark:border-[#3d5662]/80",
+    hoverBorder: "hover:border-[#82c5e5] dark:hover:border-[#467d99]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(19,139,201,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 
   olive: {
-    label: "text-[#668044] dark:text-[#adc58a]",
+    label: "group-hover:text-[#668044] dark:group-hover:text-[#adc58a]",
     value: "text-[#668044] dark:text-[#adc58a]",
-    surface: "from-[#eaf0df]/90 dark:from-[#303829]/65",
-    bar: "from-[#668044] via-[#adc58a] to-transparent dark:from-[#adc58a]",
-    glow: "bg-[#668044]/10 dark:bg-[#adc58a]/10",
-    border: "hover:border-[#a9bd82] dark:hover:border-[#718c52]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(102,128,68,0.13)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#668044] dark:bg-[#adc58a]",
+    dot: "bg-[#839e60] dark:bg-[#adc58a]",
+    surface: "from-[#e3ebd2]/95 dark:from-[#303829]/70",
+    border: "border-[#cbd9b2] dark:border-[#48533a]/80",
+    hoverBorder: "hover:border-[#a9bd82] dark:hover:border-[#718c52]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(102,128,68,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 
   red: {
-    label: "text-[#c64141] dark:text-[#ef8989]",
+    label: "group-hover:text-[#c64141] dark:group-hover:text-[#ef8989]",
     value: "text-[#c64141] dark:text-[#ef8989]",
-    surface: "from-[#fde8e8]/90 dark:from-[#402727]/65",
-    bar: "from-[#d84b4b] via-[#ef8989] to-transparent dark:from-[#ef8989]",
-    glow: "bg-[#d84b4b]/10 dark:bg-[#ef8989]/10",
-    border: "hover:border-[#e6a0a0] dark:hover:border-[#955858]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(216,75,75,0.13)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#d84b4b] dark:bg-[#ef8989]",
+    dot: "bg-[#d84b4b] dark:bg-[#ef8989]",
+    surface: "from-[#f8dfdf]/95 dark:from-[#402727]/70",
+    border: "border-[#ecc3c3] dark:border-[#583737]/80",
+    hoverBorder: "hover:border-[#e6a0a0] dark:hover:border-[#955858]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(216,75,75,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 
   purple: {
-    label: "text-[#7a49b5] dark:text-[#b58bdd]",
+    label: "group-hover:text-[#7a49b5] dark:group-hover:text-[#b58bdd]",
     value: "text-[#7a49b5] dark:text-[#b58bdd]",
-    surface: "from-[#f0e8fb]/90 dark:from-[#352b40]/65",
-    bar: "from-[#7a49b5] via-[#b58bdd] to-transparent dark:from-[#b58bdd]",
-    glow: "bg-[#7a49b5]/10 dark:bg-[#b58bdd]/10",
-    border: "hover:border-[#b99add] dark:hover:border-[#795d93]",
-    shadow:
-      "hover:shadow-[0_14px_32px_rgba(122,73,181,0.13)] dark:hover:shadow-[0_14px_32px_rgba(0,0,0,0.30)]",
-    bottom: "bg-[#7a49b5] dark:bg-[#b58bdd]",
+    dot: "bg-[#7a49b5] dark:bg-[#b58bdd]",
+    surface: "from-[#ecdef7]/95 dark:from-[#352b40]/70",
+    border: "border-[#d8c3eb] dark:border-[#4f405c]/80",
+    hoverBorder: "hover:border-[#b99add] dark:hover:border-[#795d93]",
+    hoverShadow: "hover:shadow-[0_14px_30px_rgba(122,73,181,0.15)] dark:hover:shadow-[0_14px_30px_rgba(0,0,0,0.30)]",
   },
 };
 
@@ -169,55 +154,39 @@ function MetricCard({
   value,
   accent,
   note,
-  className = "",
 }: {
   label: string;
   value: string;
   accent: MetricAccent;
   note?: string;
-  className?: string;
 }) {
   const style = metricStyles[accent];
 
   return (
     <div
-      className={`group relative min-h-[136px] overflow-hidden rounded-[22px]
-        border border-border/80
-        bg-gradient-to-br ${style.surface} via-card to-card p-4 sm:p-5
-        shadow-[0_3px_18px_hsl(var(--foreground)/0.055)]
-        transition-all duration-200 ease-out
-        hover:-translate-y-1
-        ${style.border}
-        ${style.shadow}
-        ${className}`}
+      className={`group relative flex min-h-[144px] flex-col justify-between overflow-hidden rounded-[22px]
+        border bg-gradient-to-br ${style.surface} via-card to-card px-5 py-5
+        shadow-[0_5px_18px_rgba(76,61,41,0.10)] dark:shadow-[0_3px_14px_hsl(var(--foreground)/0.045)]
+        transition-[transform,border-color,box-shadow] duration-200 ease-out
+        hover:-translate-y-1 hover:scale-[1.015] ${style.border} ${style.hoverBorder} ${style.hoverShadow}`}
     >
-      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${style.bar}`} />
-
-      {/* Hover glow */}
-      <div
-        className={`pointer-events-none absolute -bottom-10 -right-8 h-28 w-28 rounded-full blur-2xl opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${style.glow}`}
-      />
-
-      <div className="relative min-w-0 pt-1">
-        <p className={`text-[13px] font-semibold tracking-wide transition-colors duration-200 ${style.label}`}>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className={`truncate text-[13px] font-semibold tracking-wide text-[#62584d] transition-colors duration-200 dark:text-muted-foreground ${style.label}`}>
           {label}
         </p>
+        <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-white/40 dark:ring-white/[0.06] ${style.dot}`} />
+      </div>
 
-        <p className={`mt-3 truncate text-2xl font-bold leading-tight tracking-[-0.035em] transition-transform duration-200 group-hover:translate-x-0.5 ${style.value}`}>
+      <div className="relative mt-5 min-w-0">
+        <p className={`truncate text-[28px] font-bold leading-none tracking-[-0.04em] transition-transform duration-200 group-hover:translate-y-[-1px] ${style.value}`}>
           {value}
         </p>
-
         {note && (
-          <p className={`mt-2 text-xs font-medium transition-transform duration-200 group-hover:translate-x-0.5 ${style.label}`}>
+          <p className="mt-2 truncate text-xs font-medium text-muted-foreground">
             {note}
           </p>
         )}
       </div>
-
-      {/* Bottom hover accent */}
-      <div
-        className={`absolute bottom-0 left-7 right-7 h-[3px] origin-center scale-x-0 rounded-full transition-transform duration-300 group-hover:scale-x-100 ${style.bottom}`}
-      />
     </div>
   );
 }
@@ -349,7 +318,7 @@ export default function DashboardPage() {
           </div>
 
           {/* MAIN METRICS */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               label={t.dashboard.todaySales}
               value={formatMoney(
@@ -414,13 +383,12 @@ export default function DashboardPage() {
               value={formatNumber(workingCount)}
               accent="purple"
               note="Currently working"
-              className="lg:col-start-2"
             />
           </div>
 
           {/* SALES TREND */}
-          <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_4px_20px_hsl(var(--foreground)/0.055)]">
-            <div className="flex flex-col gap-4 border-b border-border px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+          <section className="overflow-hidden rounded-[22px] border border-border/75 bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
+            <div className="flex flex-col gap-4 border-b border-border/70 bg-muted/15 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-[22px] font-bold tracking-[-0.025em] text-foreground">
                   {t.dashboard.salesTrend}
@@ -451,8 +419,8 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
 
             {/* EXTERNAL MARKETPLACE */}
-            <section className="overflow-hidden rounded-[24px] border border-[#f0dcca] dark:border-[#4a3727] bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
-              <div className="border-b border-orange-200/70 bg-gradient-to-r from-orange-50/80 to-transparent px-6 py-5 dark:border-orange-950/50 dark:from-orange-950/20">
+            <section className="overflow-hidden rounded-[22px] border border-border/75 bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
+              <div className="border-b border-border/70 bg-muted/15 px-6 py-5">
                 <div>
                   <h3 className="font-bold text-foreground">
                     {t.dashboard.externalSection.replace(
@@ -492,8 +460,8 @@ export default function DashboardPage() {
             </section>
 
             {/* WASTE */}
-            <section className="overflow-hidden rounded-[24px] border border-[#eadede] dark:border-[#472e2e] bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
-              <div className="border-b border-rose-200/70 bg-gradient-to-r from-rose-50/80 to-transparent px-6 py-5 dark:border-rose-950/60 dark:from-rose-950/20">
+            <section className="overflow-hidden rounded-[22px] border border-border/75 bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
+              <div className="border-b border-border/70 bg-muted/15 px-6 py-5">
                 <div>
                   <h3 className="font-bold tracking-tight text-foreground">
                     {t.dashboard.wasteSection}
@@ -506,25 +474,28 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:p-5">
-                {[
-                  { label: locale === "ar" ? "طلبات الهالك" : "Waste orders", value: formatNumber(waste.count) },
-                  { label: locale === "ar" ? "تكلفة الهالك" : "Waste cost", value: formatMoney(waste.cost, settings.currencySymbol) },
-                  { label: locale === "ar" ? "قيمة المبيعات" : "Sales value", value: formatMoney(waste.sellingValue, settings.currencySymbol) },
-                ].map(({ label, value }) => (
-                  <div key={label} className="flex min-h-[136px] min-w-0 flex-col justify-center rounded-2xl border border-rose-200/70 border-s-4 border-s-rose-400 bg-rose-50/65 px-4 py-3.5 dark:border-rose-950/60 dark:border-s-rose-400 dark:bg-rose-950/20">
-                    <span className="min-w-0">
-                      <span className="block truncate text-xs font-medium text-muted-foreground">{label}</span>
-                      <span className="mt-2 block truncate text-2xl font-bold leading-tight tracking-[-0.035em] text-rose-700 dark:text-rose-300">{value}</span>
-                    </span>
-                  </div>
-                ))}
+                <MetricCard
+                  label={locale === "ar" ? "طلبات الهالك" : "Waste orders"}
+                  value={formatNumber(waste.count)}
+                  accent="red"
+                />
+                <MetricCard
+                  label={locale === "ar" ? "تكلفة الهالك" : "Waste cost"}
+                  value={formatMoney(waste.cost, settings.currencySymbol)}
+                  accent="red"
+                />
+                <MetricCard
+                  label={locale === "ar" ? "قيمة المبيعات" : "Sales value"}
+                  value={formatMoney(waste.sellingValue, settings.currencySymbol)}
+                  accent="red"
+                />
               </div>
             </section>
           </div>
 
           {/* PAYMENT BREAKDOWN */}
-          <section className="overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_4px_20px_hsl(var(--foreground)/0.05)]">
-            <div className="border-b border-border/70 bg-gradient-to-r from-muted/50 to-transparent px-6 py-5">
+          <section className="overflow-hidden rounded-[22px] border border-border/75 bg-card shadow-[0_4px_18px_hsl(var(--foreground)/0.045)]">
+            <div className="border-b border-border/70 bg-muted/15 px-6 py-5">
               <h3 className="text-[21px] font-bold tracking-[-0.02em] text-foreground">
                 {t.dashboard.paymentBreakdown}
               </h3>
@@ -599,7 +570,7 @@ export default function DashboardPage() {
                   return (
                     <div
                       key={p.method}
-                      className="group flex min-h-[220px] flex-col rounded-[20px] border border-border/80 bg-card p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_10px_24px_hsl(var(--foreground)/0.08)]"
+                      className="group flex min-h-[196px] flex-col rounded-[20px] border border-border/75 bg-card p-4 shadow-[0_3px_14px_hsl(var(--foreground)/0.045)] transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-[0_8px_22px_hsl(var(--foreground)/0.075)]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${methodStyle}`}>

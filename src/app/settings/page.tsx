@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Upload, Trash2, Tag, Plus, Search, SlidersHorizontal, ReceiptText, Store, CreditCard, MonitorCog, ChevronDown } from "lucide-react";
+import { Upload, Trash2, Tag, Plus, Search, SlidersHorizontal, ReceiptText, Store, CreditCard, MonitorCog, ChevronDown, Ban } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ShopLogo } from "@/components/layout/ShopLogo";
 import { makeLogoBackgroundTransparent } from "@/lib/branding/transparentLogo";
@@ -31,7 +31,8 @@ import {
   deletePromoCode,
   searchCustomers,
 } from "@/lib/supabase/api";
-import type { Customer, LoyaltySettings, Order, PromoCode } from "@/lib/types";
+import type { Customer, LoyaltySettings, Order, OrderCancellationSettings, PromoCode } from "@/lib/types";
+import { getOrderCancellationSettings } from "@/lib/orderCancellation";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024;
 
@@ -87,7 +88,7 @@ export default function SettingsPage() {
   const currentBranch = branches.find((branch) => branch.id === currentBranchId);
   const renameBranch = useBranchStore((s) => s.renameBranch);
   const currentBranchName = currentBranch?.name[locale] || currentBranch?.name.en || "";
-  const [activeSection, setActiveSection] = useState<"shop" | "receipt" | "business" | "payments">("shop");
+  const [activeSection, setActiveSection] = useState<"shop" | "receipt" | "business" | "payments" | "cancellation">("shop");
   const [showCashierDevices, setShowCashierDevices] = useState(false);
   const [showLoyaltySettings, setShowLoyaltySettings] = useState(false);
 
@@ -95,6 +96,9 @@ export default function SettingsPage() {
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [branchNameDraft, setBranchNameDraft] = useState(currentBranchName);
   const [savingBranchName, setSavingBranchName] = useState(false);
+  const [cancelReasonArDraft, setCancelReasonArDraft] = useState("");
+  const [cancelReasonEnDraft, setCancelReasonEnDraft] = useState("");
+  const cancellationSettings = getOrderCancellationSettings(settings.orderCancellation);
 
   useEffect(() => {
     setBranchNameDraft(currentBranchName);
@@ -313,12 +317,40 @@ export default function SettingsPage() {
     }
   };
 
+  const saveCancellationSettings = (patch: Partial<OrderCancellationSettings>) =>
+    updateSettings({ orderCancellation: { ...cancellationSettings, ...patch } });
+
+  const handleAddCancellationReason = async () => {
+    const ar = cancelReasonArDraft.trim();
+    const en = cancelReasonEnDraft.trim();
+    if (!ar && !en) {
+      toast(isArabic ? "اكتب سبب الإلغاء بالعربية أو الإنجليزية" : "Enter the reason in Arabic or English", "error");
+      return;
+    }
+    const name = { ar: ar || en, en: en || ar };
+    const duplicate = cancellationSettings.reasons.some((reason) =>
+      reason.name.ar.trim().toLocaleLowerCase() === name.ar.toLocaleLowerCase()
+      || reason.name.en.trim().toLocaleLowerCase() === name.en.toLocaleLowerCase()
+    );
+    if (duplicate) {
+      toast(isArabic ? "سبب الإلغاء موجود بالفعل" : "This cancellation reason already exists", "error");
+      return;
+    }
+    const reason = { id: `cancel-${Date.now()}`, name };
+    const saved = await saveCancellationSettings({ reasons: [...cancellationSettings.reasons, reason] });
+    if (saved) {
+      setCancelReasonArDraft("");
+      setCancelReasonEnDraft("");
+    }
+  };
+
   const isArabic = locale === "ar";
   const sections = [
     { id: "shop" as const, label: isArabic ? "المحل والطاولات" : "Shop & tables", description: isArabic ? "تقسيمات الطعام وبيانات المحل" : "Dining areas and shop details", Icon: Store },
     { id: "receipt" as const, label: isArabic ? "الإيصال" : "Receipt", description: isArabic ? "بيانات الإيصال ومعاينة شكله" : "Receipt details and a live preview", Icon: ReceiptText },
     { id: "business" as const, label: isArabic ? "البيزنس والعملاء" : "Business tools", description: isArabic ? "قائمة QR والخصومات والولاء" : "QR menu, promotions and loyalty", Icon: SlidersHorizontal },
     { id: "payments" as const, label: isArabic ? "طرق الدفع" : "Payment methods", description: isArabic ? "إدارة طرق الدفع المتاحة للكاشير" : "Manage payment options available at checkout", Icon: CreditCard },
+    { id: "cancellation" as const, label: isArabic ? "إلغاء الطلبات" : "Order cancellation", description: isArabic ? "إعداد أسباب إلغاء الطلبات غير المدفوعة" : "Choose how unpaid orders can be cancelled", Icon: Ban },
   ];
 
   return (
@@ -335,7 +367,7 @@ export default function SettingsPage() {
           <span className="h-px flex-1 bg-border/70" aria-hidden="true" />
         </div>
 
-        <nav role="tablist" aria-label={isArabic ? "أقسام الإعدادات" : "Settings sections"} className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <nav role="tablist" aria-label={isArabic ? "أقسام الإعدادات" : "Settings sections"} className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-5">
           {sections.map(({ id, label, description, Icon }) => (
             <button
               key={id}
@@ -996,6 +1028,84 @@ export default function SettingsPage() {
         <div hidden={activeSection !== "payments"} className="space-y-5">
           <fieldset disabled={!canEditPayments} className="min-w-0 disabled:opacity-60">
             <PaymentMethodsManager />
+          </fieldset>
+        </div>
+
+        <div hidden={activeSection !== "cancellation"} className="space-y-5">
+          <fieldset disabled={!canEditGeneral} className="space-y-5 disabled:opacity-60">
+            <Card>
+              <CardHeader>
+                <CardTitle>{isArabic ? "إعداد إلغاء الطلبات" : "Order cancellation settings"}</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {isArabic ? "تتحكم هذه الإعدادات في إلغاء الطلبات قبل الدفع فقط." : "These options apply to orders cancelled before payment only."}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+                  <div>
+                    <p className="text-sm font-medium">{isArabic ? "إلزام سبب الإلغاء" : "Require a cancellation reason"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{isArabic ? "عند الإيقاف يمكن إلغاء الطلب من دون اختيار أو كتابة سبب." : "When off, the cashier can cancel without selecting or entering a reason."}</p>
+                  </div>
+                  <Switch
+                    checked={cancellationSettings.requireReason}
+                    disabled={!cancellationSettings.allowCustomReason && cancellationSettings.reasons.length === 0}
+                    onCheckedChange={(checked) => void saveCancellationSettings({ requireReason: checked })}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+                  <div>
+                    <p className="text-sm font-medium">{isArabic ? "السماح بكتابة سبب مخصص" : "Allow a custom reason"}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{isArabic ? "يظهر للكاشير حقل اختياري لكتابة سبب غير موجود في القائمة." : "Show an optional text field for reasons not in the list."}</p>
+                  </div>
+                  <Switch
+                    checked={cancellationSettings.allowCustomReason}
+                    disabled={cancellationSettings.requireReason && cancellationSettings.reasons.length === 0}
+                    onCheckedChange={(checked) => void saveCancellationSettings({ allowCustomReason: checked })}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>{isArabic ? "أسباب الإلغاء المتاحة" : "Available cancellation reasons"}</CardTitle>
+                <p className="text-sm text-muted-foreground">{isArabic ? "اختر الكاشير سببًا من هذه القائمة، ويمكنك إضافة أسباب خاصة بمحلّك." : "Cashiers can select from this list. Add reasons that fit your business."}</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {cancellationSettings.reasons.map((reason) => (
+                    <div key={reason.id} className="flex items-center gap-2 rounded-full border bg-muted/30 py-1 ps-3 pe-1 text-sm">
+                      <span>{reason.name[locale] || reason.name.en}</span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 rounded-full text-muted-foreground hover:text-destructive"
+                        aria-label={isArabic ? `حذف ${reason.name.ar}` : `Remove ${reason.name.en}`}
+                        disabled={cancellationSettings.requireReason && !cancellationSettings.allowCustomReason && cancellationSettings.reasons.length <= 1}
+                        onClick={() => void saveCancellationSettings({ reasons: cancellationSettings.reasons.filter((item) => item.id !== reason.id) })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                  {cancellationSettings.reasons.length === 0 && <p className="text-sm text-muted-foreground">{isArabic ? "لا توجد أسباب محفوظة." : "No reasons have been added."}</p>}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+                  <div>
+                    <Label>{isArabic ? "السبب بالعربية" : "Reason in Arabic"}</Label>
+                    <Input className="mt-1.5" dir="rtl" value={cancelReasonArDraft} onChange={(event) => setCancelReasonArDraft(event.target.value)} />
+                  </div>
+                  <div>
+                    <Label>{isArabic ? "السبب بالإنجليزية" : "Reason in English"}</Label>
+                    <Input className="mt-1.5" value={cancelReasonEnDraft} onChange={(event) => setCancelReasonEnDraft(event.target.value)} />
+                  </div>
+                  <Button type="button" variant="outline" onClick={() => void handleAddCancellationReason()}>
+                    <Plus className="h-4 w-4" />{isArabic ? "إضافة سبب" : "Add reason"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </fieldset>
         </div>
 

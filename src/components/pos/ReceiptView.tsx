@@ -104,7 +104,9 @@ export function ReceiptView({ order, preview = false }: { order: Order; preview?
       <div className="my-2 border-t border-dashed border-border" />
       <div className="flex justify-between capitalize">
         <span>{t.pos.payment}</span>
-        {order.payment.method === "split" ? (
+        {order.status === "voided" ? (
+          <span>{t.pos.notPaid}</span>
+        ) : order.payment.method === "split" ? (
           <span className="flex flex-col items-end normal-case">
             {order.payment.splitParts?.length ? order.payment.splitParts.map((part, index) => {
               const methodLabel = part.method === "cash" ? t.pos.cash : part.method === "card" ? t.pos.card : t.pos.wallet;

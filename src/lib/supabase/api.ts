@@ -965,6 +965,23 @@ export async function createOrder(
   };
 }
 
+/** Persist an unpaid cart cancellation for the POS order history. This uses a
+ * separate RPC from create_order so cancellations never consume inventory. */
+export async function recordDraftCancellation(
+  order: Omit<Order, "id" | "orderNumber">,
+  approvalPin?: string
+): Promise<Order> {
+  const { lines, branchId, cashierId, ...orderFields } = order;
+  const res = await supabase.rpc("record_draft_order_cancellation", {
+    p_branch_id: branchId,
+    p_actor_id: cashierId,
+    p_approval_pin: approvalPin || null,
+    p_order: orderFields,
+    p_lines: lines,
+  });
+  return fromOrderRow(unwrap(res));
+}
+
 export async function refundOrder(id: string, branchId: string): Promise<void> {
   const { data, error } = await supabase
     .from("orders")

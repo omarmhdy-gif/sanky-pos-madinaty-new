@@ -168,7 +168,7 @@ export interface Order {
   cashierId: string;
   cashierName: string;
   createdAt: string; // ISO
-  /** Required when a completed order is voided; kept for audit and details. */
+  /** Optional per branch settings; kept for cancellation audit and details. */
   voidReason?: string;
   /** Mandatory when payment.method === "waste" — why this order's items were
    * discarded. Unused/undefined for every other payment method. */
@@ -387,6 +387,17 @@ export interface MultiPricingSettings {
   secondaryLabel: { en: string; ar: string };
 }
 
+export interface OrderCancellationReason {
+  id: string;
+  name: { en: string; ar: string };
+}
+
+export interface OrderCancellationSettings {
+  requireReason: boolean;
+  allowCustomReason: boolean;
+  reasons: OrderCancellationReason[];
+}
+
 export interface ShopSettings {
   shopName: string;
   logo?: string | null;
@@ -411,6 +422,7 @@ export interface ShopSettings {
   externalPaymentName?: { en: string; ar: string };
   externalPaymentIcon?: string;
   externalPaymentMethods?: ExternalPaymentMethod[];
+  orderCancellation?: OrderCancellationSettings;
   /** Shared cashier table map and active table orders for website/desktop POS. */
   diningLayout?: {
     sections: { id: string; name: string }[];

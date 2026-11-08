@@ -17,6 +17,7 @@ import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useTableStore } from "@/lib/store/useTableStore";
 import { hasPermission } from "@/lib/permissions";
 import { authenticateStaffPin } from "@/lib/supabase/api";
+import { getOrderCancellationSettings } from "@/lib/orderCancellation";
 
 export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const { t, locale } = useI18n();
@@ -42,7 +43,9 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
     setCustomerId,
   } = useCartStore();
   const settings = useDataStore((s) => s.settings);
+  const cancellationSettings = getOrderCancellationSettings(settings.orderCancellation);
   const products = useDataStore((s) => s.products);
+  const recordDraftCancellation = useDataStore((s) => s.recordDraftCancellation);
   const holdOrder = useHeldOrdersStore((s) => s.holdOrder);
   const currentUser = useAuthStore((s) => s.currentUser);
   const canApplyDiscount = hasPermission(currentUser, "pos.apply_discount");
@@ -52,7 +55,8 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const canEditCustomer = hasPermission(currentUser, "customers.edit");
   const multiPricing = settings.multiPricing;
   const [confirmClear, setConfirmClear] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonOption, setCancelReasonOption] = useState("");
+  const [cancelReasonNote, setCancelReasonNote] = useState("");
   const [approvalPin, setApprovalPin] = useState("");
   const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
@@ -73,6 +77,11 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const [customerSaving, setCustomerSaving] = useState(false);
 
   const branchId = useBranchStore((s) => s.currentBranchId) || (currentUser as any)?.branchId || "";
+  const selectedCancelReason = cancellationSettings.reasons.find((reason) => reason.id === cancelReasonOption);
+  const cancelReason = [selectedCancelReason?.name[locale] || selectedCancelReason?.name.en, cancelReasonNote.trim()]
+    .filter(Boolean)
+    .join(" — ")
+    .slice(0, 300);
 
   useEffect(() => {
     if (!showDiscount || !branchId) return;
@@ -256,7 +265,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
   };
 
   const handleCancelDraft = async () => {
-    if (!cancelReason.trim()) return;
+    if (cancellationSettings.requireReason && !cancelReason.trim()) return;
     setCancelSubmitting(true);
     try {
       if (!canCancelOrder) {
@@ -267,17 +276,39 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
           return;
         }
       }
+      const cancelledAt = new Date().toISOString();
+      await recordDraftCancellation({
+        lines,
+        subtotal,
+        discountAmount,
+        discountPercent,
+        taxAmount,
+        taxRate: settings.taxEnabled ? settings.taxRate : 0,
+        total,
+        payment: { method: "cash", amount: 0 },
+        status: "voided",
+        type: orderType,
+        tableNumber,
+        customerName: customerName || undefined,
+        customerId,
+        cashierId: currentUser?.id ?? "unknown",
+        cashierName: currentUser?.name ?? "Unknown",
+        createdAt: cancelledAt,
+        voidReason: cancelReason.trim(),
+      }, canCancelOrder ? undefined : approvalPin);
       if (tableId) {
         useTableStore.getState().clearTableOrder(tableId);
         useTableStore.getState().releaseTable(tableId);
       }
       clearCart();
       setConfirmClear(false);
-      setCancelReason("");
+      setCancelReasonOption("");
+      setCancelReasonNote("");
       setApprovalPin("");
       toast(t.pos.orderCancelled, "info");
     } catch (error) {
-      toast(error instanceof Error ? error.message : t.orders.voidApprovalFailed, "error");
+      const message = error instanceof Error ? error.message : t.orders.voidApprovalFailed;
+      toast(/record_draft_order_cancellation|schema cache/i.test(message) ? t.pos.cancelSetupMissing : message, "error");
     } finally {
       setCancelSubmitting(false);
     }
@@ -445,24 +476,40 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
       </div>
 
       {confirmClear && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-6" onClick={() => { setConfirmClear(false); setCancelReason(""); setApprovalPin(""); }}>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-6" onClick={() => { setConfirmClear(false); setCancelReasonOption(""); setCancelReasonNote(""); setApprovalPin(""); }}>
           <div
             className="w-full max-w-xs rounded-xl bg-background p-5 shadow-xl animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="mb-1 text-sm font-semibold">{t.pos.cancelDraftTitle}</p>
             <p className="mb-3 text-xs text-muted-foreground">{t.pos.cancelDraftHint}</p>
-            <label className="mb-3 block space-y-1.5 text-sm">
-              <span className="text-xs font-medium">{t.orders.voidReason}</span>
-              <textarea
-                value={cancelReason}
-                onChange={(event) => setCancelReason(event.target.value.slice(0, 300))}
-                maxLength={300}
-                rows={2}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                placeholder={t.orders.voidReasonPlaceholder}
-              />
-            </label>
+            <div className="mb-3 space-y-2">
+              <label className="block space-y-1.5 text-sm">
+                <span className="text-xs font-medium">
+                  {t.orders.voidReason}{!cancellationSettings.requireReason && <span className="ms-1 text-muted-foreground">({t.common.optional})</span>}
+                </span>
+                <select
+                  value={cancelReasonOption}
+                  onChange={(event) => setCancelReasonOption(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">{t.pos.selectCancelReason}</option>
+                  {cancellationSettings.reasons.map((reason) => (
+                    <option key={reason.id} value={reason.id}>{reason.name[locale] || reason.name.en}</option>
+                  ))}
+                </select>
+              </label>
+              {cancellationSettings.allowCustomReason && (
+                <textarea
+                  value={cancelReasonNote}
+                  onChange={(event) => setCancelReasonNote(event.target.value.slice(0, 300))}
+                  maxLength={300}
+                  rows={2}
+                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder={t.orders.voidReasonPlaceholder}
+                />
+              )}
+            </div>
             {!canCancelOrder && <label className="mb-3 block space-y-1.5 text-sm">
               <span className="text-xs font-medium">{t.orders.voidApprovalPin}</span>
               <Input
@@ -476,14 +523,14 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
               />
             </label>}
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => { setConfirmClear(false); setCancelReason(""); setApprovalPin(""); }} disabled={cancelSubmitting}>
+              <Button variant="outline" className="flex-1" onClick={() => { setConfirmClear(false); setCancelReasonOption(""); setCancelReasonNote(""); setApprovalPin(""); }} disabled={cancelSubmitting}>
                 {t.common.cancel}
               </Button>
               <Button
                 variant="destructive"
                 className="flex-1"
                 onClick={() => void handleCancelDraft()}
-                disabled={cancelSubmitting || !cancelReason.trim() || (!canCancelOrder && approvalPin.length !== 4)}
+                disabled={cancelSubmitting || (cancellationSettings.requireReason && !cancelReason.trim()) || (!canCancelOrder && approvalPin.length !== 4)}
               >
                 {t.pos.clearCart}
               </Button>
