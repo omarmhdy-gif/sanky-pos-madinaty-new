@@ -168,6 +168,8 @@ export interface Order {
   cashierId: string;
   cashierName: string;
   createdAt: string; // ISO
+  /** Required when a completed order is voided; kept for audit and details. */
+  voidReason?: string;
   /** Mandatory when payment.method === "waste" — why this order's items were
    * discarded. Unused/undefined for every other payment method. */
   wasteReason?: string;
@@ -208,10 +210,9 @@ export interface Expense {
 
 export type UserRole = "owner" | "cashier";
 
-// Granular, independently-grantable page access — see lib/permissions.ts
-// for the single source of truth on how these gate the sidebar/routes.
-// "recipes" and "devices" are deliberately NOT here: those two pages stay
-// hard-locked to the owner role regardless of any permission grant.
+// Employee grants are independently selectable per module and per action.
+// The undotted module keys preserve older records and represent page access;
+// see lib/permissions.ts for the compatibility and enforcement rules.
 export type PermissionKey =
   | "pos"
   | "orders"
@@ -224,7 +225,20 @@ export type PermissionKey =
   | "employees"
   | "customers"
   | "settings"
-  | "dashboard";
+  | "dashboard"
+  | "recipes"
+  | "pos.view" | "orders.view" | "inventory.view" | "purchases.view" | "products.view" | "finance.view" | "reports.view" | "attendance.view" | "employees.view" | "customers.view" | "settings.view" | "dashboard.view" | "recipes.view"
+  | "pos.sell" | "pos.apply_discount" | "pos.change_price" | "pos.manage_shifts"
+  | "orders.void" | "orders.refund"
+  | "inventory.create" | "inventory.edit" | "inventory.delete" | "inventory.receive" | "inventory.adjust" | "inventory.manufacture" | "inventory.quality"
+  | "purchases.create" | "purchases.delete"
+  | "products.create" | "products.edit" | "products.delete" | "products.manage_recipe"
+  | "finance.create" | "finance.edit" | "finance.delete"
+  | "reports.export"
+  | "attendance.create" | "attendance.edit" | "attendance.delete" | "attendance.clock_in" | "attendance.clock_out"
+  | "employees.create" | "employees.edit" | "employees.delete" | "employees.manage_permissions"
+  | "customers.create" | "customers.edit"
+  | "settings.edit_general" | "settings.edit_receipt" | "settings.edit_payments" | "settings.edit_dining" | "settings.edit_loyalty" | "settings.edit_shifts";
 
 export interface StaffUser {
   id: string;
@@ -233,10 +247,14 @@ export interface StaffUser {
   role: UserRole;
   avatarColor: string;
   isActive: boolean;
-  /** undefined/null = "not configured yet" — falls back to this user's
-   * role-based default (see lib/permissions.ts's ROLE_DEFAULT_PERMISSIONS),
-   * which is exactly what they could already access before this system
-   * existed. Owner ignores this entirely (always has every permission). */
+  /** Set when this employee can also sign in with business email/password. */
+  hasConsoleLogin?: boolean;
+  /** Whether a cashier PIN is configured; never returns the PIN itself. */
+  hasPin?: boolean;
+  /** Returned only by the secured employee-account management endpoint. */
+  email?: string;
+  /** undefined/null = "not configured yet" — retains the legacy default
+   * access for this account. Owner remains unrestricted for compatibility. */
   permissions?: PermissionKey[];
 }
 

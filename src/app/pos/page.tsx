@@ -7,7 +7,7 @@ import { ProductGrid } from "@/components/pos/ProductGrid";
 import { CartPanel } from "@/components/pos/CartPanel";
 import { ModifierDialog } from "@/components/pos/ModifierDialog";
 import { PaymentDialog } from "@/components/pos/PaymentDialog";
-import { HeldOrdersDialog } from "@/components/pos/HeldOrdersDialog";
+import { PosOrdersDialog } from "@/components/pos/PosOrdersDialog";
 import { useDataStore } from "@/lib/store/useDataStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useCartStore } from "@/lib/store/useCartStore";
@@ -72,7 +72,7 @@ export default function PosPage() {
   const [modifierProduct, setModifierProduct] = useState<Product | null>(null);
   const [modifierOpen, setModifierOpen] = useState(false);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [heldOpen, setHeldOpen] = useState(false);
+  const [ordersOpen, setOrdersOpen] = useState(false);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [inventoryCheckOpen, setInventoryCheckOpen] = useState(false);
   const [startShiftOpen, setStartShiftOpen] = useState(false);
@@ -259,7 +259,7 @@ export default function PosPage() {
             onSelect={setActiveCategory}
             search={search}
             onSearchChange={setSearch}
-            onOpenHeld={() => setHeldOpen(true)}
+            onOpenOrders={() => setOrdersOpen(true)}
           />
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pb-24 md:pb-0">
             <ProductGrid
@@ -313,7 +313,7 @@ export default function PosPage() {
         onOrderComplete={() => setSearch("")}
         checkSaleAccess={async () => (await refreshSubscription(true)).canSell}
       />
-      <HeldOrdersDialog open={heldOpen} onOpenChange={setHeldOpen} />
+      <PosOrdersDialog open={ordersOpen} onOpenChange={setOrdersOpen} />
       <InventoryQualityCheckDialog open={inventoryCheckOpen} onOpenChange={setInventoryCheckOpen} />
       <Dialog open={tablePickerOpen} onOpenChange={setTablePickerOpen}>
         <DialogContent className="max-w-xl no-scrollbar">

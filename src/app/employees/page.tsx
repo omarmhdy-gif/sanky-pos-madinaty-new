@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Pencil, UsersRound, ShieldCheck, KeyRound, Fingerprint, ArrowUpRight } from "lucide-react";
+import { Plus, Trash2, Pencil, UsersRound, Fingerprint, ArrowUpRight } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,19 +19,25 @@ import {
 import { StaffFormDialog } from "@/components/settings/StaffFormDialog";
 import { AttendanceEmployeeFormDialog } from "@/components/settings/AttendanceEmployeeFormDialog";
 import { useDataStore } from "@/lib/store/useDataStore";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { StaffUser, AttendanceEmployee } from "@/lib/types";
-import { ALL_PERMISSION_KEYS, ROLE_DEFAULT_PERMISSIONS } from "@/lib/permissions";
+import { countPermissionActions, countPermissionModules, hasPermission } from "@/lib/permissions";
 
 export default function EmployeesPage() {
   const { t } = useI18n();
+  const currentUser = useAuthStore((s) => s.currentUser);
   const staff = useDataStore((s) => s.staff);
   const deleteStaff = useDataStore((s) => s.deleteStaff);
   const attendanceEmployees = useDataStore((s) => s.attendanceEmployees);
   const deleteAttendanceEmployee = useDataStore((s) => s.deleteAttendanceEmployee);
-  const ownerCount = staff.filter((user) => user.role === "owner").length;
-  const cashierCount = staff.filter((user) => user.role === "cashier").length;
+  const activeStaffCount = staff.filter((user) => user.isActive).length;
+  const canCreateStaff = hasPermission(currentUser, "employees.create");
+  const canEditStaff = hasPermission(currentUser, "employees.edit");
+  const canDeleteStaff = hasPermission(currentUser, "employees.delete");
+  const canEditAttendance = hasPermission(currentUser, "attendance.edit");
+  const canDeleteAttendance = hasPermission(currentUser, "attendance.delete");
 
   const [staffFormOpen, setStaffFormOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
@@ -55,7 +61,7 @@ export default function EmployeesPage() {
                 <p className="mt-1 text-sm text-muted-foreground">{t.settings.staffPageDesc}</p>
               </div>
             </div>
-            <Button
+            {canCreateStaff && <Button
               className="h-11 rounded-xl px-5 shadow-md shadow-primary/15"
               onClick={() => {
                 setEditingStaff(null);
@@ -64,15 +70,15 @@ export default function EmployeesPage() {
             >
               <Plus className="h-4 w-4" />
               {t.settings.addStaff}
-            </Button>
+            </Button>}
           </div>
         </section>
 
         <section className="grid gap-3 sm:grid-cols-3">
           {[
             { label: t.settings.staffAccounts, value: staff.length, icon: UsersRound, tone: "bg-primary/10 text-primary" },
-            { label: t.settings.roles.owner, value: ownerCount, icon: ShieldCheck, tone: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
-            { label: t.settings.roles.cashier, value: cashierCount, icon: KeyRound, tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+            { label: t.common.active, value: activeStaffCount, icon: UsersRound, tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
+            { label: t.common.inactive, value: staff.length - activeStaffCount, icon: UsersRound, tone: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
           ].map(({ label, value, icon: Icon, tone }) => (
             <Card key={label} className="overflow-hidden rounded-2xl transition-transform hover:-translate-y-0.5">
               <CardContent className="flex items-center justify-between p-4 sm:p-5">
@@ -92,20 +98,25 @@ export default function EmployeesPage() {
             {staff.length === 0 ? <div className="rounded-2xl border border-dashed p-10 text-center text-sm text-muted-foreground">{t.common.noResults}</div> :
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {staff.map((u) => {
-                  const accessCount = u.role === "owner" ? ALL_PERMISSION_KEYS.length : (u.permissions ?? ROLE_DEFAULT_PERMISSIONS[u.role]).length;
+                  const isFullAccess = u.role === "owner";
+                  const permissionSummary = isFullAccess
+                    ? t.settings.allModules
+                    : t.settings.permissionsSelected
+                      .replace("{modules}", String(countPermissionModules(u)))
+                      .replace("{actions}", String(countPermissionActions(u)));
                   return <article key={u.id} className="group rounded-2xl border border-border/80 bg-card p-4 transition-all hover:border-primary/30 hover:shadow-md hover:shadow-primary/5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white shadow-sm ring-4 ring-background", u.avatarColor)}>{u.name.slice(0, 2).toUpperCase()}</div>
-                        <div className="min-w-0"><p className="truncate font-semibold">{u.name}</p><Badge variant="outline" className="mt-1 rounded-full">{t.settings.roles[u.role]}</Badge></div>
+                        <div className="min-w-0"><p className="truncate font-semibold">{u.name}</p><div className="mt-1 flex flex-wrap gap-1.5"><Badge variant={u.isActive ? "outline" : "destructive"} className="rounded-full">{u.isActive ? t.common.active : t.common.inactive}</Badge>{u.hasConsoleLogin && <Badge variant="secondary" className="rounded-full">{t.settings.emailAndPassword}</Badge>}{!u.hasConsoleLogin && u.hasPin && <Badge variant="outline" className="rounded-full">{t.settings.employeePinAccess}</Badge>}</div></div>
                       </div>
                       <div className="flex gap-1 opacity-70 transition-opacity group-hover:opacity-100">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" aria-label={`${t.common.edit} ${u.name}`} title={t.common.edit} onClick={() => { setEditingStaff(u); setStaffFormOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" aria-label={`${t.common.delete} ${u.name}`} title={t.common.delete} onClick={() => setDeleteStaffTarget(u)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                        {canEditStaff && <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" aria-label={`${t.common.edit} ${u.name}`} title={t.common.edit} onClick={() => { setEditingStaff(u); setStaffFormOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>}
+                        {canDeleteStaff && u.role !== "owner" && <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-destructive" aria-label={`${t.common.delete} ${u.name}`} title={t.common.delete} onClick={() => setDeleteStaffTarget(u)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                       </div>
                     </div>
                     <div className="mt-4 flex items-center justify-between border-t border-border/70 pt-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1.5"><Fingerprint className="h-3.5 w-3.5" />{u.role === "owner" ? t.settings.allModules : t.settings.permissionsSelected.replace("{count}", String(accessCount))}</span>
+                      <span className="flex items-center gap-1.5"><Fingerprint className="h-3.5 w-3.5" />{permissionSummary}</span>
                       <ArrowUpRight className="h-3.5 w-3.5 opacity-40 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary group-hover:opacity-100" />
                     </div>
                   </article>;
@@ -120,16 +131,6 @@ export default function EmployeesPage() {
               <CardTitle>{t.employees.attendanceEmployees}</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">{t.employees.attendanceEmployeesDesc}</p>
             </div>
-            <Button className="rounded-xl"
-              size="sm"
-              onClick={() => {
-                setEditingAttn(null);
-                setAttnFormOpen(true);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t.employees.addEmployee}
-            </Button>
           </CardHeader>
           <CardContent className="space-y-2 p-4 sm:p-5">
             {attendanceEmployees.length === 0 && (
@@ -149,7 +150,7 @@ export default function EmployeesPage() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <Button
+                  {canEditAttendance && <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
@@ -159,15 +160,15 @@ export default function EmployeesPage() {
                     }}
                   >
                     <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
+                  </Button>}
+                  {canDeleteAttendance && <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-destructive"
                     onClick={() => setDeleteAttnTarget(e)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  </Button>}
                 </div>
               </div>
             ))}

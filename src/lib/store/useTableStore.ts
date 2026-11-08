@@ -3,6 +3,9 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import type { CartLine } from "@/lib/types";
 import { getSafeStorage } from "@/lib/store/storage";
 import { genId } from "@/lib/utils";
+import { useAuthStore } from "@/lib/store/useAuthStore";
+import { hasPermission } from "@/lib/permissions";
+import { toast } from "@/components/ui/toast";
 
 export interface DiningSection {
   id: string;
@@ -75,7 +78,14 @@ const DEFAULT_TABLES: DiningTable[] = DEFAULT_SECTIONS.flatMap((section, section
 
 export const useTableStore = create<TableStore>()(
   persist(
-    (set) => ({
+    (set) => {
+      const canEditDining = () => {
+        if (hasPermission(useAuthStore.getState().currentUser, "settings.edit_dining")) return true;
+        toast("You do not have permission to edit dining tables.", "error");
+        return false;
+      };
+
+      return ({
       sections: DEFAULT_SECTIONS,
       tables: DEFAULT_TABLES,
       occupiedTableIds: [],
@@ -91,23 +101,23 @@ export const useTableStore = create<TableStore>()(
           ),
         };
       }),
-      addSection: (name) => set((state) => ({ sections: [...state.sections, { id: genId("section"), name }] })),
-      updateSection: (id, name) => set((state) => ({ sections: state.sections.map((section) => section.id === id ? { ...section, name } : section) })),
-      deleteSection: (id) => set((state) => ({ sections: state.sections.filter((section) => section.id !== id) })),
-      addTable: (input) => set((state) => ({
+      addSection: (name) => { if (!canEditDining()) return; set((state) => ({ sections: [...state.sections, { id: genId("section"), name }] })); },
+      updateSection: (id, name) => { if (!canEditDining()) return; set((state) => ({ sections: state.sections.map((section) => section.id === id ? { ...section, name } : section) })); },
+      deleteSection: (id) => { if (!canEditDining()) return; set((state) => ({ sections: state.sections.filter((section) => section.id !== id) })); },
+      addTable: (input) => { if (!canEditDining()) return; set((state) => ({
         tables: (() => {
           const sectionTables = state.tables.filter((table) => table.sectionId === input.sectionId);
           const position = sectionTables.length;
           return [...state.tables, { ...input, id: genId("table"), position, positionX: position % 4, positionY: Math.floor(position / 4) }];
         })(),
-      })),
-      updateTable: (id, patch) => set((state) => ({ tables: state.tables.map((table) => table.id === id ? { ...table, ...patch } : table) })),
-      deleteTable: (id) => set((state) => {
+      })); },
+      updateTable: (id, patch) => { if (!canEditDining()) return; set((state) => ({ tables: state.tables.map((table) => table.id === id ? { ...table, ...patch } : table) })); },
+      deleteTable: (id) => { if (!canEditDining()) return; set((state) => {
         const tableOrders = { ...state.tableOrders };
         delete tableOrders[id];
         return { tables: state.tables.filter((table) => table.id !== id), occupiedTableIds: state.occupiedTableIds.filter((tableId) => tableId !== id), tableOrders };
-      }),
-      moveTable: (id, sectionId, position) => set((state) => {
+      }); },
+      moveTable: (id, sectionId, position) => { if (!canEditDining()) return; set((state) => {
         const dragged = state.tables.find((table) => table.id === id);
         if (!dragged) return state;
         if (dragged.sectionId === sectionId) {
@@ -125,7 +135,7 @@ export const useTableStore = create<TableStore>()(
         const normalized = [...source.map((table, index) => ({ ...table, position: index })), ...target.map((table, index) => ({ ...table, sectionId, position: index }))];
         const changedIds = new Set(normalized.map((table) => table.id));
         return { tables: [...state.tables.filter((table) => !changedIds.has(table.id)), ...normalized] };
-      }),
+      }); },
       occupyTable: (id) => set((state) => ({ occupiedTableIds: state.occupiedTableIds.includes(id) ? state.occupiedTableIds : [...state.occupiedTableIds, id] })),
       releaseTable: (id) => set((state) => ({ occupiedTableIds: state.occupiedTableIds.filter((tableId) => tableId !== id) })),
       saveTableOrder: (id, draft) => set((state) => ({ tableOrders: { ...state.tableOrders, [id]: { ...draft, updatedAt: new Date().toISOString() } } })),
@@ -134,7 +144,8 @@ export const useTableStore = create<TableStore>()(
         delete tableOrders[id];
         return { tableOrders };
       }),
-    }),
+      });
+    },
     {
       name: "sanky-pos-dining-tables",
       version: 3,

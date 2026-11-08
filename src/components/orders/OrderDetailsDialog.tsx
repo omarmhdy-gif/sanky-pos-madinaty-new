@@ -13,8 +13,7 @@ import { toast } from "@/components/ui/toast";
 import type { Order } from "@/lib/types";
 import { Printer } from "lucide-react";
 import { printOrderReceipt } from "@/lib/printing/printReceipt";
-
-const CASHIER_CANCEL_WINDOW_MS = 5 * 60 * 1000;
+import { hasPermission } from "@/lib/permissions";
 
 export function OrderDetailsDialog({
   order,
@@ -26,29 +25,22 @@ export function OrderDetailsDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const { t, locale } = useI18n();
-  const voidOrder = useDataStore((s) => s.voidOrder);
   const refundOrder = useDataStore((s) => s.refundOrder);
   const settings = useDataStore((s) => s.settings);
-  const role = useAuthStore((s) => s.currentUser?.role);
+  const currentUser = useAuthStore((s) => s.currentUser);
   const branches = useBranchStore((s) => s.branches);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const [printing, setPrinting] = useState(false);
 
   if (!order) return null;
 
-  const isOwner = role === "owner";
-  const withinCancelWindow = Date.now() - new Date(order.createdAt).getTime() < CASHIER_CANCEL_WINDOW_MS;
-
-  const handleVoid = () => {
-    voidOrder(order.id);
-    toast(t.orders.void, "info");
-    onOpenChange(false);
-  };
-
-  const handleRefund = () => {
-    refundOrder(order.id);
-    toast(t.orders.refund, "info");
-    onOpenChange(false);
+  const canRefund = hasPermission(currentUser, "orders.refund");
+  const handleRefund = async () => {
+    if (order.status !== "completed" || order.payment.method === "waste" || !canRefund) return;
+    if (await refundOrder(order.id)) {
+      toast(t.orders.refund, "success");
+      onOpenChange(false);
+    }
   };
 
   const handlePrint = async () => {
@@ -84,28 +76,23 @@ export function OrderDetailsDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {order.status === "voided" && order.voidReason && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+            <p className="font-semibold text-destructive">{t.orders.voidReason}</p>
+            <p className="mt-1 text-foreground">{order.voidReason}</p>
+          </div>
+        )}
+
         <ReceiptView order={order} />
 
-        <DialogFooter className="grid grid-cols-3 gap-2 sm:grid-cols-3">
-          <Button variant="outline" size="sm" disabled={printing} onClick={handlePrint}>
+        <DialogFooter className="flex-row justify-center gap-3 sm:justify-center">
+          <Button variant="outline" size="sm" className="h-11 w-36 shrink-0 justify-center" disabled={printing} onClick={handlePrint}>
             <Printer className="h-3.5 w-3.5" />
             {t.pos.printReceipt}
           </Button>
-          {order.status === "completed" && isOwner && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleRefund}>
-                {t.orders.refund}
-              </Button>
-              <Button variant="destructive" size="sm" onClick={handleVoid}>
-                {t.orders.void}
-              </Button>
-            </>
-          )}
-          {order.status === "completed" && !isOwner && withinCancelWindow && (
-            <Button variant="destructive" size="sm" onClick={handleVoid}>
-              {t.orders.cancel}
-            </Button>
-          )}
+          {order.status === "completed" && order.payment.method !== "waste" && canRefund && <Button variant="outline" size="sm" className="h-11 w-36 shrink-0 justify-center" onClick={() => void handleRefund()}>
+            {t.orders.refund}
+          </Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

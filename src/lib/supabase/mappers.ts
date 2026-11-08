@@ -234,6 +234,9 @@ export function fromStaffPublicRow(row: any): StaffUser {
     role: row.role,
     avatarColor: row.avatar_color,
     isActive: row.is_active,
+    hasConsoleLogin: row.has_console_login ?? row.hasConsoleLogin ?? false,
+    hasPin: row.has_pin ?? row.hasPin ?? false,
+    email: row.login_email ?? row.email ?? undefined,
     permissions: row.permissions ?? undefined,
   };
 }
@@ -313,6 +316,7 @@ export function fromOrderRow(row: any): Order {
     cashierId: row.cashier_id,
     cashierName: row.cashier_name,
     createdAt: row.created_at,
+    voidReason: row.void_reason ?? undefined,
     wasteReason: row.waste_reason ?? undefined,
   };
 }

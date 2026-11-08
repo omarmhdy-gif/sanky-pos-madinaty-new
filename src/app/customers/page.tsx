@@ -21,9 +21,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useDataStore } from "@/lib/store/useDataStore";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useI18n } from "@/lib/i18n";
 import { formatDate, formatMoney, formatNumber } from "@/lib/utils";
+import { hasPermission } from "@/lib/permissions";
 import { createCustomer, updateCustomer } from "@/lib/supabase/api";
 import { toast } from "@/components/ui/toast";
 import type { Customer } from "@/lib/types";
@@ -61,6 +63,9 @@ export default function CustomersPage() {
   const loading = useDataStore((state) => state.loading);
   const currency = useDataStore((state) => state.settings.currencySymbol || "EGP");
   const branchId = useBranchStore((state) => state.currentBranchId);
+  const currentUser = useAuthStore((state) => state.currentUser);
+  const canCreate = hasPermission(currentUser, "customers.create");
+  const canEdit = hasPermission(currentUser, "customers.edit");
 
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<CustomerFilter>("all");
@@ -105,6 +110,10 @@ export default function CustomersPage() {
   };
 
   const saveCustomer = async () => {
+    if (editingCustomer ? !canEdit : !canCreate) {
+      toast(isArabic ? "ليس لديك صلاحية لهذا الإجراء" : "You do not have permission for this action", "error");
+      return;
+    }
     const cleanName = name.trim();
     const cleanPhone = phone.trim();
     if (!cleanName || !cleanPhone || !branchId) {
@@ -150,6 +159,10 @@ export default function CustomersPage() {
   };
 
   const toggleLoyalty = async (customer: Customer, enabled: boolean) => {
+    if (!canEdit) {
+      toast(isArabic ? "ليس لديك صلاحية لتعديل العميل" : "You do not have permission to edit customers", "error");
+      return;
+    }
     setLoyaltyUpdatingId(customer.id);
     try {
       const updated = await updateCustomer(customer.id, { loyaltyEnabled: enabled });
@@ -184,10 +197,10 @@ export default function CustomersPage() {
               {isArabic ? "ملفات العملاء، مشترياتهم، ونقاط الولاء في مكان واحد." : "Customer profiles, purchase history, and loyalty at a glance."}
             </p>
           </div>
-          <Button onClick={() => openForm()}>
+          {canCreate && <Button onClick={() => openForm()}>
             <Plus className="h-4 w-4" />
             {isArabic ? "إضافة عميل" : "Add customer"}
-          </Button>
+          </Button>}
         </div>
 
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
@@ -235,7 +248,7 @@ export default function CustomersPage() {
               <div className="flex min-h-44 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-center">
                 <Users className="h-8 w-8 text-muted-foreground/50" />
                 <p className="text-sm font-medium">{search || filter !== "all" ? (isArabic ? "لا توجد نتائج مطابقة" : "No matching customers") : (isArabic ? "لا يوجد عملاء بعد" : "No customers yet")}</p>
-                {!search && filter === "all" && (
+                {!search && filter === "all" && canCreate && (
                   <Button size="sm" variant="outline" onClick={() => openForm()}>
                     <Plus className="h-4 w-4" />
                     {isArabic ? "أضف أول عميل" : "Add the first customer"}
@@ -278,7 +291,7 @@ export default function CustomersPage() {
                     </div>
 
                     <div className="flex items-center justify-between gap-3 border-t pt-2 sm:justify-end sm:border-0 sm:pt-0">
-                      <div className="flex items-center gap-2" title={isArabic ? "تفعيل أو إيقاف الولاء" : "Enable or disable loyalty"}>
+                      {canEdit && <div className="flex items-center gap-2" title={isArabic ? "تفعيل أو إيقاف الولاء" : "Enable or disable loyalty"}>
                         {loyaltyUpdatingId === customer.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
                         <Label htmlFor={`loyalty-${customer.id}`} className="text-xs text-muted-foreground">
                           {isArabic ? "الولاء" : "Loyalty"}
@@ -290,11 +303,11 @@ export default function CustomersPage() {
                           onCheckedChange={(checked) => void toggleLoyalty(customer, checked)}
                           aria-label={isArabic ? `الولاء لـ ${customer.name}` : `Loyalty for ${customer.name}`}
                         />
-                      </div>
-                      <Button type="button" variant="outline" size="sm" onClick={() => openForm(customer)}>
+                      </div>}
+                      {canEdit && <Button type="button" variant="outline" size="sm" onClick={() => openForm(customer)}>
                         <Pencil className="h-3.5 w-3.5" />
                         {isArabic ? "تعديل" : "Edit"}
-                      </Button>
+                      </Button>}
                     </div>
 
                     <p className="text-[11px] text-muted-foreground sm:col-span-3">
@@ -343,7 +356,7 @@ export default function CustomersPage() {
             <Button type="button" variant="outline" disabled={saving} onClick={() => closeForm(false)}>
               {isArabic ? "إلغاء" : "Cancel"}
             </Button>
-            <Button type="button" disabled={saving} onClick={() => void saveCustomer()}>
+            <Button type="button" disabled={saving || (editingCustomer ? !canEdit : !canCreate)} onClick={() => void saveCustomer()}>
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving
                 ? isArabic ? "جارٍ الحفظ..." : "Saving..."

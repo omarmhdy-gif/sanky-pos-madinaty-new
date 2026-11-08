@@ -21,6 +21,7 @@ import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { cacheShopLogo } from "@/lib/store/shopLogoCache";
 import { loadPosSnapshot, savePosSnapshot } from "@/lib/store/offlineSnapshot";
+import { hasPermission, NEW_EMPLOYEE_DEFAULT_PERMISSIONS } from "@/lib/permissions";
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
@@ -112,8 +113,7 @@ interface DataStore extends AppData {
   // it was actually sold in, not whichever branch happens to be selected
   // on this till at the moment connectivity returns.
   addOrder: (o: Omit<Order, "id" | "orderNumber" | "branchId">, branchIdOverride?: string) => Promise<Order>;
-  voidOrder: (id: string) => Promise<void>;
-  refundOrder: (id: string) => Promise<void>;
+  refundOrder: (id: string) => Promise<boolean>;
   fetchOrdersInRange: (from: Date, to: Date) => Promise<void>;
   // One page of orders (newest first), merged into `orders` the same
   // dedup'd way as fetchOrdersInRange — used by the Orders page's
@@ -127,8 +127,8 @@ interface DataStore extends AppData {
   updateExpense: (id: string, patch: Partial<Expense>) => Promise<void>;
   deleteExpense: (id: string) => Promise<void>;
   // Staff — pin is separate from StaffUser (never read back from the server)
-  addStaff: (s: { name: string; pin: string; role: UserRole; avatarColor: string; isActive: boolean; permissions?: PermissionKey[] }) => Promise<void>;
-  updateStaff: (id: string, patch: Partial<StaffUser> & { pin?: string }) => Promise<void>;
+  addStaff: (s: { name: string; pin: string; role: UserRole; avatarColor: string; isActive: boolean; permissions?: PermissionKey[]; email?: string; password?: string }) => Promise<boolean>;
+  updateStaff: (id: string, patch: Partial<StaffUser> & { pin?: string; password?: string }) => Promise<boolean>;
   deleteStaff: (id: string) => Promise<void>;
   // Settings
   updateSettings: (patch: Partial<ShopSettings>) => Promise<boolean>;
@@ -144,7 +144,38 @@ const EMPTY_SETTINGS: ShopSettings = {
   theme: "light",
 };
 
-export const useDataStore = create<DataStore>()((set, get) => ({
+export const useDataStore = create<DataStore>()((set, get) => {
+  const canPerform = (permission: PermissionKey): boolean => {
+    if (hasPermission(useAuthStore.getState().currentUser, permission)) return true;
+    toast(get().settings.locale === "ar" ? "ليس لديك صلاحية لتنفيذ هذا الإجراء." : "You do not have permission to perform this action.", "error");
+    return false;
+  };
+
+  const canPerformAny = (permissions: PermissionKey[]): boolean => {
+    if (permissions.some((permission) => hasPermission(useAuthStore.getState().currentUser, permission))) return true;
+    toast(get().settings.locale === "ar" ? "ليس لديك صلاحية لتنفيذ هذا الإجراء." : "You do not have permission to perform this action.", "error");
+    return false;
+  };
+
+  const canGrantPermissions = (permissions: PermissionKey[] | undefined, allowNewEmployeeDefault = false): boolean => {
+    if (permissions === undefined) return true;
+    const actor = useAuthStore.getState().currentUser;
+    if (!actor || actor.role === "owner") return true;
+    if (hasPermission(actor, "employees.manage_permissions")) {
+      // Managers may only grant capabilities they already hold. Legacy bare
+      // module grants expand at runtime, but may not be newly assigned.
+      const safe = permissions.every((permission) => permission.includes(".") && hasPermission(actor, permission));
+      if (safe) return true;
+    } else if (allowNewEmployeeDefault && permissions.length === NEW_EMPLOYEE_DEFAULT_PERMISSIONS.length && NEW_EMPLOYEE_DEFAULT_PERMISSIONS.every((permission) => permissions.includes(permission))) {
+      // Employee creators who cannot manage permissions may only use the
+      // fixed least-privilege defaults for a new account.
+      return true;
+    }
+    toast(get().settings.locale === "ar" ? "لا يمكنك منح صلاحية لا تملكها." : "You cannot grant a permission you do not have.", "error");
+    return false;
+  };
+
+  return ({
   settings: EMPTY_SETTINGS,
   staff: [],
   categories: [],
@@ -232,6 +263,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   addProduct: async (p) => {
+    if (!canPerform("products.create") || (p.recipe?.length && !canPerform("products.manage_recipe"))) return;
     try {
       const created = await api.createProduct({ ...p, branchId: requireBranchId() }, get().products.length);
       set((state) => ({ products: [...state.products, created] }));
@@ -241,6 +273,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   updateProduct: async (id, patch) => {
+    if (!canPerform("products.edit") || (patch.recipe !== undefined && !canPerform("products.manage_recipe"))) return false;
     try {
       const updated = await api.updateProduct(id, patch);
       set((state) => ({ products: state.products.map((p) => (p.id === id ? updated : p)) }));
@@ -252,11 +285,13 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   updateProductRecipe: async (id, recipe) => {
+    if (!canPerform("products.manage_recipe")) return;
     const updated = await api.updateProduct(id, { recipe });
     set((state) => ({ products: state.products.map((product) => (product.id === id ? updated : product)) }));
     syncRecipeAcrossBranches(updated);
   },
   deleteProduct: async (id) => {
+    if (!canPerform("products.delete")) return;
     try {
       await api.deleteProduct(id);
       set((state) => ({ products: state.products.filter((p) => p.id !== id) }));
@@ -266,6 +301,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   addCategory: async (c) => {
+    if (!canPerform("products.create")) return;
     try {
       const created = await api.createCategory({ ...c, branchId: requireBranchId() }, get().categories.length);
       set((state) => ({ categories: [...state.categories, created] }));
@@ -274,6 +310,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   updateCategory: async (id, patch) => {
+    if (!canPerform("products.edit")) return;
     try {
       const updated = await api.updateCategory(id, patch);
       set((state) => ({ categories: state.categories.map((c) => (c.id === id ? updated : c)) }));
@@ -282,6 +319,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   deleteCategory: async (id) => {
+    if (!canPerform("products.delete")) return;
     try {
       await api.deleteCategory(id);
       set((state) => ({ categories: state.categories.filter((c) => c.id !== id) }));
@@ -291,6 +329,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   addInventoryItem: async (item) => {
+    if (!canPerform("inventory.create")) return undefined;
     try {
       const created = await api.createInventoryItem({ ...item, branchId: requireBranchId() });
       set((state) => ({ inventoryItems: [...state.inventoryItems, created].sort((a, b) => a.quantity - b.quantity) }));
@@ -304,6 +343,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   updateInventoryItem: async (id, patch) => {
+    if (!canPerform("inventory.edit")) return false;
     try {
       const updated = await api.updateInventoryItem(id, patch);
       set((state) => ({ inventoryItems: state.inventoryItems.map((i) => (i.id === id ? updated : i)) }));
@@ -317,6 +357,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   deleteInventoryItem: async (id) => {
+    if (!canPerform("inventory.delete")) return;
     try {
       await api.deleteInventoryItem(id);
       set((state) => ({ inventoryItems: state.inventoryItems.filter((i) => i.id !== id) }));
@@ -325,6 +366,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   receiveStock: async (itemId, qty, unitCost, supplier) => {
+    if (!canPerformAny(["inventory.receive", "purchases.create"])) return false;
     try {
       const { employeeId, employeeName } = currentEmployee();
       const result = await api.receivePurchase({
@@ -350,6 +392,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   manufactureInventoryItem: async (itemId, qty) => {
+    if (!canPerform("inventory.manufacture")) return false;
     try {
       const { employeeId, employeeName } = currentEmployee();
       const result = await api.manufactureInventoryItem({
@@ -373,6 +416,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   setOpeningBalance: async (itemId, purchaseQty, purchaseUnitCost) => {
+    if (!canPerform("inventory.receive")) return false;
     try {
       const { employeeId, employeeName } = currentEmployee();
       const result = await api.setInventoryOpeningBalance({
@@ -389,6 +433,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   adjustStock: async (itemId, delta, reason) => {
+    if (!canPerform("inventory.adjust")) return false;
     try {
       const { employeeId, employeeName } = currentEmployee();
       const result = await api.recordStockMovement({
@@ -410,10 +455,12 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   recordInventoryQualityCheck: async (input) => {
+    if (!canPerform("inventory.quality")) return;
     const record = await api.createInventoryQualityCheck({ ...input, branchId: requireBranchId() });
     set((state) => ({ inventoryQualityChecks: [record, ...state.inventoryQualityChecks] }));
   },
   deletePurchase: async (purchaseId) => {
+    if (!canPerform("purchases.delete")) return;
     try {
       await api.deletePurchase(purchaseId);
       set((state) => ({ purchases: state.purchases.filter((p) => p.id !== purchaseId) }));
@@ -423,6 +470,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   startShift: async (openingCash) => {
+    if (!canPerform("pos.manage_shifts")) throw new Error("Permission denied");
     try {
       const user = useAuthStore.getState().currentUser;
       if (!user) throw new Error("No logged-in user");
@@ -438,12 +486,14 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   closeShift: async (shiftId, actualCash) => {
+    if (!canPerform("pos.manage_shifts")) throw new Error("Permission denied");
     const shift = await api.closeShift(shiftId, actualCash);
     set((state) => ({ shifts: state.shifts.map((s) => (s.id === shiftId ? shift : s)) }));
     return shift;
   },
 
   addAttendanceEmployee: async (e) => {
+    if (!canPerform("attendance.create")) return;
     try {
       const created = await api.saveAttendanceEmployee({ ...e, branchId: requireBranchId() });
       set((state) => ({ attendanceEmployees: [...state.attendanceEmployees, created] }));
@@ -452,6 +502,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   updateAttendanceEmployee: async (id, patch) => {
+    if (!canPerform("attendance.edit")) return;
     try {
       const current = get().attendanceEmployees.find((e) => e.id === id);
       const updated = await api.saveAttendanceEmployee({
@@ -471,6 +522,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   deleteAttendanceEmployee: async (id) => {
+    if (!canPerform("attendance.delete")) return;
     try {
       await api.deleteAttendanceEmployee(id);
       set((state) => ({ attendanceEmployees: state.attendanceEmployees.filter((e) => e.id !== id) }));
@@ -479,6 +531,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   checkInAttendance: async (shiftKey, officialStart, officialEnd, employeeId, employeeName, graceMinutes) => {
+    if (!canPerform("attendance.clock_in")) throw new Error("Permission denied");
     const record = await api.checkInAttendance({
       branchId: requireBranchId(),
       employeeId,
@@ -492,12 +545,15 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     return record;
   },
   checkOutAttendance: async (attendanceId) => {
+    if (!canPerform("attendance.clock_out")) throw new Error("Permission denied");
     const record = await api.checkOutAttendance(attendanceId);
     set((state) => ({ attendance: state.attendance.map((a) => (a.id === attendanceId ? record : a)) }));
     return record;
   },
 
   addOrder: async (o, branchIdOverride) => {
+    if (!canPerform("pos.sell")) throw new Error("Permission denied");
+    if ((o.discountAmount > 0 || (o.discountPercent ?? 0) > 0) && !canPerform("pos.apply_discount")) throw new Error("Permission denied");
     const { inventoryUpdates, stockMovementUpdates, ...created } = await api.createOrder({ ...o, branchId: branchIdOverride ?? requireBranchId() });
     set((state) => ({
       orders: [created, ...state.orders],
@@ -509,20 +565,22 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }));
     return created;
   },
-  voidOrder: async (id) => {
-    try {
-      await api.voidOrder(id);
-      set((state) => ({ orders: state.orders.map((o) => (o.id === id ? { ...o, status: "voided" as const } : o)) }));
-    } catch (err) {
-      toast(errorMessage(err, "Failed to void order"), "error");
-    }
-  },
   refundOrder: async (id) => {
+    if (!canPerform("orders.refund")) return false;
+    const order = get().orders.find((item) => item.id === id);
+    if (!order || order.status !== "completed" || order.payment.method === "waste") {
+      toast(get().settings.locale === "ar"
+        ? "لا يمكن استرجاع الطلب إلا إذا كان مدفوعًا ومكتملًا."
+        : "Only a paid, completed order can be refunded.", "error");
+      return false;
+    }
     try {
-      await api.refundOrder(id);
+      await api.refundOrder(id, order.branchId);
       set((state) => ({ orders: state.orders.map((o) => (o.id === id ? { ...o, status: "refunded" as const } : o)) }));
+      return true;
     } catch (err) {
       toast(errorMessage(err, "Failed to refund order"), "error");
+      return false;
     }
   },
   fetchOrdersInRange: async (from, to) => {
@@ -570,6 +628,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   addExpense: async (e) => {
+    if (!canPerform("finance.create")) return;
     try {
       const created = await api.createExpense({ ...e, branchId: requireBranchId() });
       set((state) => ({ expenses: [created, ...state.expenses] }));
@@ -578,6 +637,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   updateExpense: async (id, patch) => {
+    if (!canPerform("finance.edit")) return;
     try {
       const updated = await api.updateExpense(id, patch);
       set((state) => ({ expenses: state.expenses.map((e) => (e.id === id ? updated : e)) }));
@@ -586,6 +646,7 @@ export const useDataStore = create<DataStore>()((set, get) => ({
     }
   },
   deleteExpense: async (id) => {
+    if (!canPerform("finance.delete")) return;
     try {
       await api.deleteExpense(id);
       set((state) => ({ expenses: state.expenses.filter((e) => e.id !== id) }));
@@ -595,17 +656,29 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   addStaff: async (s) => {
+    if (!canPerform("employees.create") || !canGrantPermissions(s.permissions, true)) return false;
     try {
-      const created = await api.saveStaff({ ...s, branchId: requireBranchId() });
+      const branchId = requireBranchId();
+      const created = s.email || s.password
+        ? await api.saveEmployeeConsoleAccount({ ...s, permissions: s.permissions ?? [], branchId })
+        : await api.saveStaff({ ...s, branchId });
       set((state) => ({ staff: [...state.staff, created] }));
+      return true;
     } catch (err) {
       toast(errorMessage(err, "Failed to add staff"), "error");
+      return false;
     }
   },
   updateStaff: async (id, patch) => {
+    if (!canPerform("employees.edit") || !canGrantPermissions(patch.permissions)) return false;
+    const actor = useAuthStore.getState().currentUser;
+    if (patch.permissions !== undefined && actor?.id === id && actor.role !== "owner") {
+      toast(get().settings.locale === "ar" ? "لا يمكنك تغيير صلاحيات حسابك بنفسك." : "You cannot change your own permissions.", "error");
+      return false;
+    }
     try {
       const current = get().staff.find((s) => s.id === id);
-      const updated = await api.saveStaff({
+      const payload = {
         id,
         name: patch.name ?? current?.name ?? "",
         pin: patch.pin,
@@ -617,13 +690,25 @@ export const useDataStore = create<DataStore>()((set, get) => ({
         // touch permissions — otherwise an unrelated edit (renaming, PIN
         // reset) would silently wipe a previously-configured grant list.
         permissions: patch.permissions ?? current?.permissions,
-      });
+      };
+      const updated = current?.hasConsoleLogin || patch.email || patch.password
+        ? await api.saveEmployeeConsoleAccount({
+            ...payload,
+            permissions: payload.permissions ?? [],
+            email: patch.email,
+            password: patch.password,
+          })
+        : await api.saveStaff(payload);
       set((state) => ({ staff: state.staff.map((s) => (s.id === id ? updated : s)) }));
+      return true;
     } catch (err) {
       toast(errorMessage(err, "Failed to update staff"), "error");
+      return false;
     }
   },
   deleteStaff: async (id) => {
+    if (!canPerform("employees.delete")) return;
+    if (get().staff.find((staffMember) => staffMember.id === id)?.role === "owner") return;
     try {
       await api.deleteStaff(id);
       set((state) => ({ staff: state.staff.filter((s) => s.id !== id) }));
@@ -633,6 +718,20 @@ export const useDataStore = create<DataStore>()((set, get) => ({
   },
 
   updateSettings: async (patch) => {
+    const requiredPermissions = new Set<PermissionKey>();
+    for (const key of Object.keys(patch) as (keyof ShopSettings)[]) {
+      if (key === "diningLayout") {
+        const currentLayout = get().settings.diningLayout;
+        const nextLayout = patch.diningLayout;
+        const currentMap = JSON.stringify({ sections: currentLayout?.sections, tables: currentLayout?.tables });
+        const nextMap = JSON.stringify({ sections: nextLayout?.sections, tables: nextLayout?.tables });
+        requiredPermissions.add(currentMap === nextMap ? "pos.sell" : "settings.edit_dining");
+      } else if (key === "receiptFooter" || key === "address" || key === "phone") requiredPermissions.add("settings.edit_receipt");
+      else if (key === "externalPaymentMethods" || key === "externalPaymentName" || key === "externalPaymentIcon") requiredPermissions.add("settings.edit_payments");
+      else if (key === "shiftTemplates") requiredPermissions.add("settings.edit_shifts");
+      else requiredPermissions.add("settings.edit_general");
+    }
+    for (const permission of requiredPermissions) if (!canPerform(permission)) return false;
     // Optimistic: Settings inputs are bound directly to store state, so
     // waiting for the round-trip before updating would make typing feel laggy.
     const previous = get().settings;
@@ -650,4 +749,5 @@ export const useDataStore = create<DataStore>()((set, get) => ({
       return false;
     }
   },
-}));
+  });
+});

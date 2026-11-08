@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DateFilterBar } from "@/components/shared/DateFilterBar";
 import { useDataStore } from "@/lib/store/useDataStore";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { externalPaymentLabel, getExternalPaymentIcon } from "@/lib/externalPayment";
@@ -48,6 +49,7 @@ import {
 } from "@/lib/analytics";
 import { stockLevel } from "@/lib/inventory";
 import { supabase } from "@/lib/supabase/client";
+import { hasPermission } from "@/lib/permissions";
 
 const SalesOverviewChart = dynamic(
   () => import("@/components/reports/SalesOverviewChart").then((m) => m.SalesOverviewChart),
@@ -81,6 +83,8 @@ function dateLabel(date: string) {
 }
 
 function ReportExportButton({ onClick }: { onClick: () => void }) {
+  const currentUser = useAuthStore((state) => state.currentUser);
+  if (!hasPermission(currentUser, "reports.export")) return null;
   return (
     <Button variant="outline" size="sm" onClick={onClick}>
       <Download className="h-3.5 w-3.5" />
@@ -104,6 +108,8 @@ export default function ReportsPage() {
   const settings = useDataStore((s) => s.settings);
   const fetchOrdersInRange = useDataStore((s) => s.fetchOrdersInRange);
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const canExport = hasPermission(currentUser, "reports.export");
 
   const [filter, setFilter] = useState<DateFilterKey>("week");
   const [customFrom, setCustomFrom] = useState("");
@@ -364,10 +370,10 @@ export default function ReportsPage() {
                 setCustomTo(to);
               }}
             />
-            <Button variant="outline" size="sm" onClick={exportAll}>
+            {canExport && <Button variant="outline" size="sm" onClick={exportAll}>
               <Download className="h-3.5 w-3.5" />
               Export Reports
-            </Button>
+            </Button>}
           </div>
         </div>
 

@@ -9,11 +9,14 @@ import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { formatMoney, cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/toast";
 import { createCustomer, searchCustomers, updateCustomer, fetchCustomerById, fetchPromoCodes } from "@/lib/supabase/api";
 import type { PromoCode } from "@/lib/types";
 import { useBranchStore } from "@/lib/store/useBranchStore";
 import { useTableStore } from "@/lib/store/useTableStore";
+import { hasPermission } from "@/lib/permissions";
+import { authenticateStaffPin } from "@/lib/supabase/api";
 
 export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const { t, locale } = useI18n();
@@ -42,8 +45,16 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
   const products = useDataStore((s) => s.products);
   const holdOrder = useHeldOrdersStore((s) => s.holdOrder);
   const currentUser = useAuthStore((s) => s.currentUser);
+  const canApplyDiscount = hasPermission(currentUser, "pos.apply_discount");
+  const canChangePrice = hasPermission(currentUser, "pos.change_price");
+  const canCancelOrder = hasPermission(currentUser, "orders.void");
+  const canCreateCustomer = hasPermission(currentUser, "customers.create");
+  const canEditCustomer = hasPermission(currentUser, "customers.edit");
   const multiPricing = settings.multiPricing;
   const [confirmClear, setConfirmClear] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [approvalPin, setApprovalPin] = useState("");
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
   const [showDiscount, setShowDiscount] = useState(false);
   const [discountInput, setDiscountInput] = useState("");
   const [fixedDiscountInput, setFixedDiscountInput] = useState("");
@@ -121,12 +132,15 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
       const existing = await searchCustomers(branchId, phone);
       const exactMatch = existing.find((c: any) => c.phone === phone);
 
+      if (!exactMatch && !canCreateCustomer) {
+        throw new Error(locale === "ar" ? "ليس لديك صلاحية لإضافة عملاء" : "You do not have permission to create customers");
+      }
       const saved = exactMatch
-        ? await updateCustomer(exactMatch.id, {
+        ? canEditCustomer ? await updateCustomer(exactMatch.id, {
             name,
             phone,
             loyaltyEnabled: customerLoyaltyEnabled,
-          })
+          }) : exactMatch
         : await createCustomer({
             branchId,
             name,
@@ -241,6 +255,34 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
     applySecondaryPricing((productId) => products.find((p) => p.id === productId)?.secondaryPrice);
   };
 
+  const handleCancelDraft = async () => {
+    if (!cancelReason.trim()) return;
+    setCancelSubmitting(true);
+    try {
+      if (!canCancelOrder) {
+        if (!/^\d{4}$/.test(approvalPin)) return;
+        const approver = await authenticateStaffPin(approvalPin, branchId);
+        if (!hasPermission(approver, "orders.void")) {
+          toast(t.orders.voidApprovalFailed, "error");
+          return;
+        }
+      }
+      if (tableId) {
+        useTableStore.getState().clearTableOrder(tableId);
+        useTableStore.getState().releaseTable(tableId);
+      }
+      clearCart();
+      setConfirmClear(false);
+      setCancelReason("");
+      setApprovalPin("");
+      toast(t.pos.orderCancelled, "info");
+    } catch (error) {
+      toast(error instanceof Error ? error.message : t.orders.voidApprovalFailed, "error");
+    } finally {
+      setCancelSubmitting(false);
+    }
+  };
+
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-card">
       <div className="shrink-0 flex items-center justify-between border-b border-border px-4 py-3.5">
@@ -289,7 +331,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
                 className="group relative rounded-xl border border-border bg-background p-3 animate-slide-up"
               >
                 <button
-                  onClick={() => removeLine(line.lineId)}
+                  onClick={() => lines.length === 1 ? setConfirmClear(true) : removeLine(line.lineId)}
                   className="absolute end-2 top-2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -303,7 +345,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
                 <div className="mt-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => decrementLine(line.lineId)}
+                      onClick={() => itemCount === 1 && line.qty === 1 ? setConfirmClear(true) : decrementLine(line.lineId)}
                       className="flex h-8 w-8 items-center justify-center rounded-full border border-border active:scale-90"
                     >
                       {line.qty === 1 ? <Trash2 className="h-3.5 w-3.5 text-destructive" /> : <Minus className="h-3.5 w-3.5" />}
@@ -339,7 +381,7 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
               <PauseCircle className="h-3.5 w-3.5" />
               {t.pos.holdOrder}
             </button>
-            <button
+            {canApplyDiscount && <button
               onClick={() => setShowDiscount(true)}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-xs font-medium text-muted-foreground hover:bg-accent"
             >
@@ -351,8 +393,8 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
                 : discountPercent > 0
                 ? `${discountPercent}% ${t.common.discount}`
                 : t.pos.discountApply}
-            </button>
-            {multiPricing?.enabled && (
+            </button>}
+            {multiPricing?.enabled && canChangePrice && (
               <button
                 onClick={handleApplySecondaryPricing}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-xs font-medium text-muted-foreground hover:bg-accent"
@@ -403,29 +445,47 @@ export function CartPanel({ onCharge }: { onCharge: () => void }) {
       </div>
 
       {confirmClear && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-6" onClick={() => setConfirmClear(false)}>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 p-6" onClick={() => { setConfirmClear(false); setCancelReason(""); setApprovalPin(""); }}>
           <div
             className="w-full max-w-xs rounded-xl bg-background p-5 shadow-xl animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="mb-4 text-sm font-medium">{t.pos.clearCart}?</p>
+            <p className="mb-1 text-sm font-semibold">{t.pos.cancelDraftTitle}</p>
+            <p className="mb-3 text-xs text-muted-foreground">{t.pos.cancelDraftHint}</p>
+            <label className="mb-3 block space-y-1.5 text-sm">
+              <span className="text-xs font-medium">{t.orders.voidReason}</span>
+              <textarea
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value.slice(0, 300))}
+                maxLength={300}
+                rows={2}
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                placeholder={t.orders.voidReasonPlaceholder}
+              />
+            </label>
+            {!canCancelOrder && <label className="mb-3 block space-y-1.5 text-sm">
+              <span className="text-xs font-medium">{t.orders.voidApprovalPin}</span>
+              <Input
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                value={approvalPin}
+                onChange={(event) => setApprovalPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="••••"
+                className="max-w-36 text-center tracking-[0.45em]"
+              />
+            </label>}
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setConfirmClear(false)}>
+              <Button variant="outline" className="flex-1" onClick={() => { setConfirmClear(false); setCancelReason(""); setApprovalPin(""); }} disabled={cancelSubmitting}>
                 {t.common.cancel}
               </Button>
               <Button
                 variant="destructive"
                 className="flex-1"
-                onClick={() => {
-                  if (tableId) {
-                    useTableStore.getState().clearTableOrder(tableId);
-                    useTableStore.getState().releaseTable(tableId);
-                  }
-                  clearCart();
-                  setConfirmClear(false);
-                }}
+                onClick={() => void handleCancelDraft()}
+                disabled={cancelSubmitting || !cancelReason.trim() || (!canCancelOrder && approvalPin.length !== 4)}
               >
-                {t.common.delete}
+                {t.pos.clearCart}
               </Button>
             </div>
           </div>

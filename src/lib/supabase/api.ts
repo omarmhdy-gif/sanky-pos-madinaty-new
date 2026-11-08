@@ -1,7 +1,7 @@
 // Thin async wrappers around supabase-js — one function per store action.
 // Every function throws on error; callers (useDataStore) catch and surface a toast.
 
-import { supabase } from "./client";
+import { getShopAccountNumber, supabase } from "./client";
 import { genId } from "@/lib/utils";
 import { PDF_MENU } from "@/lib/pdfMenu";
 import type {
@@ -704,6 +704,56 @@ export async function saveStaff(input: {
   return unwrap(res) as unknown as StaffUser;
 }
 
+/** Creates or updates the employee's email/password login through the
+ * server-side function. The Auth service key never reaches the browser. */
+export async function saveEmployeeConsoleAccount(input: {
+  id?: string;
+  name: string;
+  pin?: string;
+  role: UserRole;
+  avatarColor: string;
+  isActive: boolean;
+  branchId: string;
+  permissions: PermissionKey[];
+  email?: string;
+  password?: string;
+}): Promise<StaffUser> {
+  const accountNumber = getShopAccountNumber();
+  if (!accountNumber) throw new Error("Business account number is unavailable. Sign in again and retry.");
+  const { data, error } = await supabase.functions.invoke("manage-employee-login", {
+    body: {
+      accountNumber,
+      branchId: input.branchId,
+      employee: {
+        id: input.id,
+        name: input.name,
+        pin: input.pin || null,
+        role: input.role,
+        avatarColor: input.avatarColor,
+        isActive: input.isActive,
+        permissions: input.permissions,
+      },
+      email: input.email?.trim().toLowerCase() || null,
+      password: input.password || null,
+    },
+  });
+  if (error) throw new Error(error.message);
+  const row = data?.employee;
+  if (!row || typeof row.id !== "string") throw new Error("Employee account was not returned by the server.");
+  return {
+    id: row.id,
+    branchId: row.branchId,
+    name: row.name,
+    role: row.role,
+    avatarColor: row.avatarColor,
+    isActive: row.isActive,
+    permissions: row.permissions ?? undefined,
+    hasConsoleLogin: Boolean(row.hasConsoleLogin),
+    hasPin: Boolean(row.hasPin),
+    email: typeof row.email === "string" ? row.email : undefined,
+  };
+}
+
 export async function deleteStaff(id: string): Promise<void> {
   const { error } = await supabase.rpc("delete_staff", { p_id: id });
   if (error) throw new Error(error.message);
@@ -738,6 +788,29 @@ export async function authenticateShopOwner(accountNumber: string): Promise<Staf
   if (error) throw new Error(error.message);
   const row = Array.isArray(data) ? data[0] : data;
   return row ? fromStaffPublicRow(row) : null;
+}
+
+/** Resolves an email/password-authenticated employee within the entered business. */
+export async function authenticateConsoleEmployee(accountNumber: string): Promise<StaffUser | null> {
+  const { data, error } = await supabase.rpc("authenticate_console_employee", {
+    p_account_number: accountNumber.trim(),
+  });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? fromStaffPublicRow(row) : null;
+}
+
+/** Reads an employee's login email only through the branch-scoped RPC. */
+export async function fetchEmployeeLoginEmail(staffId: string, branchId: string): Promise<string | null> {
+  const accountNumber = getShopAccountNumber();
+  if (!accountNumber) return null;
+  const { data, error } = await supabase.rpc("get_employee_console_email", {
+    p_account_number: accountNumber,
+    p_branch_id: branchId,
+    p_staff_id: staffId,
+  });
+  if (error) throw new Error(error.message);
+  return typeof data === "string" ? data : null;
 }
 
 /** Checks the supplied email/account pair without exposing whether either exists. */
@@ -892,14 +965,17 @@ export async function createOrder(
   };
 }
 
-export async function voidOrder(id: string): Promise<void> {
-  const { error } = await supabase.from("orders").update({ status: "voided" }).eq("id", id);
+export async function refundOrder(id: string, branchId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ status: "refunded" })
+    .eq("id", id)
+    .eq("branch_id", branchId)
+    .eq("status", "completed")
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
-}
-
-export async function refundOrder(id: string): Promise<void> {
-  const { error } = await supabase.from("orders").update({ status: "refunded" }).eq("id", id);
-  if (error) throw new Error(error.message);
+  if (!data) throw new Error("This order is already cancelled, refunded, or unavailable in the current branch.");
 }
 
 // Fetches orders directly for an arbitrary date range instead of relying on

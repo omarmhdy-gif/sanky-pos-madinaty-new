@@ -16,7 +16,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useDataStore } from "@/lib/store/useDataStore";
+import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
+import { hasPermission } from "@/lib/permissions";
 import { useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -73,6 +75,12 @@ export default function SettingsPage() {
 
   const settings = useDataStore((s) => s.settings);
   const updateSettings = useDataStore((s) => s.updateSettings);
+  const currentUser = useAuthStore((s) => s.currentUser);
+  const canEditGeneral = hasPermission(currentUser, "settings.edit_general");
+  const canEditDining = hasPermission(currentUser, "settings.edit_dining");
+  const canEditReceipt = hasPermission(currentUser, "settings.edit_receipt");
+  const canEditPayments = hasPermission(currentUser, "settings.edit_payments");
+  const canEditLoyalty = hasPermission(currentUser, "settings.edit_loyalty");
 
   const currentBranchId = useBranchStore((s) => s.currentBranchId);
   const branches = useBranchStore((s) => s.branches);
@@ -153,6 +161,10 @@ export default function SettingsPage() {
   }, [currentBranchId]);
 
   const handleCreatePromoCode = async () => {
+    if (!canEditLoyalty) {
+      toast(isArabic ? "ليس لديك صلاحية لتعديل برنامج الولاء" : "You do not have permission to edit loyalty settings", "error");
+      return;
+    }
     if (!currentBranchId || !promoName.trim() || !promoCustomer) return;
     const percent = Number(promoPercent);
     const days = Number(promoDays);
@@ -188,6 +200,10 @@ export default function SettingsPage() {
   };
 
   const handleDeletePromoCode = async (id: string) => {
+    if (!canEditLoyalty) {
+      toast(isArabic ? "ليس لديك صلاحية لتعديل برنامج الولاء" : "You do not have permission to edit loyalty settings", "error");
+      return;
+    }
     try {
       await deletePromoCode(id);
       setPromoCodes((existing) => existing.filter((promo) => promo.id !== id));
@@ -207,6 +223,10 @@ export default function SettingsPage() {
   };
 
   const handleSaveLoyalty = async () => {
+    if (!canEditLoyalty) {
+      toast(isArabic ? "ليس لديك صلاحية لتعديل برنامج الولاء" : "You do not have permission to edit loyalty settings", "error");
+      return;
+    }
     if (!currentBranchId) {
       toast("No active branch selected", "error");
       return;
@@ -247,6 +267,10 @@ export default function SettingsPage() {
     e.target.value = "";
 
     if (!file) return;
+    if (!canEditGeneral) {
+      toast(isArabic ? "ليس لديك صلاحية لتعديل إعدادات المحل" : "You do not have permission to edit shop settings", "error");
+      return;
+    }
 
     if (!file.type.startsWith("image/") || file.size > MAX_LOGO_BYTES) {
       toast(t.products.imageUploadError, "error");
@@ -267,6 +291,10 @@ export default function SettingsPage() {
   };
 
   const handleSaveBranchName = async () => {
+    if (!canEditGeneral) {
+      toast(isArabic ? "ليس لديك صلاحية لتعديل إعدادات المحل" : "You do not have permission to edit shop settings", "error");
+      return;
+    }
     if (!currentBranch) return;
     const name = branchNameDraft.trim();
     if (!name) {
@@ -334,7 +362,9 @@ export default function SettingsPage() {
         </nav>
 
         <div hidden={activeSection !== "shop"} className="space-y-5">
-        <TableManager />
+        <fieldset disabled={!canEditDining} className="min-w-0 disabled:opacity-60">
+          <TableManager />
+        </fieldset>
 
         {/* General */}
         <Card>
@@ -343,6 +373,7 @@ export default function SettingsPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            <fieldset disabled={!canEditGeneral} className="space-y-4 disabled:opacity-60">
             <div>
               <Label>{t.settings.logo}</Label>
 
@@ -465,13 +496,17 @@ export default function SettingsPage() {
                 />
               </div>
             )}
+            </fieldset>
           </CardContent>
         </Card>
         </div>
 
         <div hidden={activeSection !== "business"} className="space-y-5">
-        <MenuQrManager />
+        <fieldset disabled={!canEditGeneral} className="min-w-0 disabled:opacity-60">
+          <MenuQrManager />
+        </fieldset>
 
+        {currentUser?.role === "owner" && <>
         <Card>
           <CardHeader className="p-0">
             <button
@@ -492,11 +527,13 @@ export default function SettingsPage() {
           </CardHeader>
           {showCashierDevices && <CardContent className="pt-0"><CashierDeviceManager /></CardContent>}
         </Card>
+        </>}
 
         {/* Promo codes */}
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Tag className="h-5 w-5" />{isArabic ? "أكواد الخصم" : "Promo Codes"}</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <fieldset disabled={!canEditLoyalty} className="space-y-4 disabled:opacity-60">
             <p className="text-sm text-muted-foreground">{isArabic ? "أنشئ كودًا مرتبطًا بعميل مسجل ونسبة خصم ومدة صلاحية. عند إدخال الكود في الـ POS سيُضاف العميل تلقائيًا للطلب." : "Create a code linked to a registered customer, with a discount and validity period. Entering it in the POS adds that customer to the order automatically."}</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1.5fr_auto] lg:items-end">
               <div><Label>{isArabic ? "اسم البرومو كود" : "Promo code"}</Label><Input className="mt-1" value={promoName} onChange={(e) => setPromoName(e.target.value.toUpperCase())} placeholder="WELCOME10" /></div>
@@ -517,6 +554,7 @@ export default function SettingsPage() {
                 <Button variant="ghost" size="icon" aria-label={isArabic ? "حذف الكود" : "Delete code"} onClick={() => handleDeletePromoCode(promo.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>;
             })}</div> : <p className="text-sm text-muted-foreground">{isArabic ? "لا توجد أكواد خصم حتى الآن" : "No promo codes created yet"}</p>}
+            </fieldset>
           </CardContent>
         </Card>
 
@@ -536,6 +574,7 @@ export default function SettingsPage() {
           </CardHeader>
 
           {showLoyaltySettings && <CardContent className="space-y-5 pt-0">
+            <fieldset disabled={!canEditLoyalty} className="space-y-5 disabled:opacity-60">
             {loyaltyLoading ? (
               <p className="text-sm text-muted-foreground">
                 {isArabic
@@ -872,6 +911,7 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
+            </fieldset>
           </CardContent>}
         </Card>
 
@@ -885,6 +925,7 @@ export default function SettingsPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
+            <fieldset disabled={!canEditReceipt} className="space-y-4 disabled:opacity-60">
             <div>
               <Label>{isArabic ? "عنوان الإيصال" : "Receipt header"}</Label>
               <div className="mt-1.5 flex items-center gap-3 rounded-lg border p-3">
@@ -935,6 +976,7 @@ export default function SettingsPage() {
                 })}
               />
             </div>
+            </fieldset>
           </CardContent>
         </Card>
 
@@ -952,7 +994,9 @@ export default function SettingsPage() {
         </div>
 
         <div hidden={activeSection !== "payments"} className="space-y-5">
-          <PaymentMethodsManager />
+          <fieldset disabled={!canEditPayments} className="min-w-0 disabled:opacity-60">
+            <PaymentMethodsManager />
+          </fieldset>
         </div>
 
       </div>

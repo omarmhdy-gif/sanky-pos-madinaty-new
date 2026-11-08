@@ -1,6 +1,7 @@
 "use client";
 
-import { Search, PauseCircle } from "lucide-react";
+import { Search, ReceiptText } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Category } from "@/lib/types";
 import { useI18n, bilingual } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -13,17 +14,30 @@ export function CategoryTabs({
   onSelect,
   search,
   onSearchChange,
-  onOpenHeld,
+  onOpenOrders,
 }: {
   categories: Category[];
   activeId: string;
   onSelect: (id: string) => void;
   search: string;
   onSearchChange: (v: string) => void;
-  onOpenHeld: () => void;
+  onOpenOrders: () => void;
 }) {
   const { t, locale } = useI18n();
-  const heldCount = useHeldOrdersStore((s) => s.held.length);
+  const held = useHeldOrdersStore((s) => s.held);
+  const [today, setToday] = useState(() => localDayKey(new Date()));
+
+  useEffect(() => {
+    const refreshDay = () => setToday(localDayKey(new Date()));
+    const timer = window.setInterval(refreshDay, 60_000);
+    window.addEventListener("focus", refreshDay);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refreshDay);
+    };
+  }, []);
+
+  const heldCount = held.filter((order) => localDayKey(new Date(order.createdAt)) === today).length;
 
   return (
     <div className="flex flex-col gap-2 border-b border-border bg-card/70 p-3 sm:px-4 sm:py-3 lg:gap-3 lg:px-5 lg:py-4">
@@ -38,14 +52,15 @@ export function CategoryTabs({
           />
         </div>
         <button
-          onClick={onOpenHeld}
+          onClick={onOpenOrders}
           className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/80 bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/20 hover:bg-accent/40 hover:shadow-md lg:h-12 lg:w-12"
-          title={t.pos.heldOrders}
+          title={t.pos.orderManagement}
+          aria-label={t.pos.orderManagement}
         >
-          <PauseCircle className="h-5 w-5 text-muted-foreground lg:h-6 lg:w-6" />
+          <ReceiptText className="h-5 w-5 text-muted-foreground lg:h-6 lg:w-6" />
           {heldCount > 0 && (
             <span className="absolute -end-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-              {heldCount}
+              {heldCount > 99 ? "99+" : heldCount}
             </span>
           )}
         </button>
@@ -79,4 +94,8 @@ export function CategoryTabs({
       </div>
     </div>
   );
+}
+
+function localDayKey(date: Date): string {
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }

@@ -15,15 +15,77 @@ import {
 } from "lucide-react";
 import type { UserRole, PermissionKey, StaffUser } from "@/lib/types";
 
+export type PermissionModuleKey =
+  | "dashboard" | "pos" | "orders" | "inventory" | "purchases" | "products"
+  | "finance" | "reports" | "attendance" | "employees" | "customers" | "settings" | "recipes";
+
+export interface PermissionModuleDefinition {
+  key: PermissionModuleKey;
+  actions: PermissionKey[];
+}
+
+/** Permission matrix used by both the employee form and runtime guards. */
+export const PERMISSION_MODULES: PermissionModuleDefinition[] = [
+  { key: "dashboard", actions: [] },
+  { key: "pos", actions: ["pos.sell", "pos.apply_discount", "pos.change_price", "pos.manage_shifts", "orders.void", "orders.refund"] },
+  { key: "orders", actions: [] },
+  { key: "products", actions: ["products.create", "products.edit", "products.delete", "products.manage_recipe"] },
+  { key: "recipes", actions: [] },
+  { key: "inventory", actions: ["inventory.create", "inventory.edit", "inventory.delete", "inventory.receive", "inventory.adjust", "inventory.manufacture", "inventory.quality"] },
+  { key: "purchases", actions: ["purchases.create", "purchases.delete"] },
+  { key: "finance", actions: ["finance.create", "finance.edit", "finance.delete"] },
+  { key: "reports", actions: ["reports.export"] },
+  { key: "attendance", actions: ["attendance.create", "attendance.edit", "attendance.delete", "attendance.clock_in", "attendance.clock_out"] },
+  { key: "employees", actions: ["employees.create", "employees.edit", "employees.delete", "employees.manage_permissions"] },
+  { key: "customers", actions: ["customers.create", "customers.edit"] },
+  { key: "settings", actions: ["settings.edit_general", "settings.edit_receipt", "settings.edit_payments", "settings.edit_dining", "settings.edit_loyalty", "settings.edit_shifts"] },
+];
+
+export const PERMISSION_GROUPS: PermissionModuleKey[][] = [
+  ["dashboard", "pos", "orders"],
+  ["products", "recipes", "inventory", "purchases"],
+  ["finance", "reports", "attendance", "employees", "customers", "settings"],
+];
+
+export const ALL_PERMISSION_KEYS: PermissionKey[] = PERMISSION_MODULES.flatMap(({ key, actions }) => [`${key}.view` as PermissionKey, ...actions]);
+
+export const NEW_EMPLOYEE_DEFAULT_PERMISSIONS: PermissionKey[] = [
+  "pos.view", "pos.sell",
+];
+
+// Kept as a fallback for existing employee rows that have never been edited.
+// The UI expands these legacy module grants into explicit action checkboxes
+// the next time an owner saves that employee.
+export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
+  owner: ALL_PERMISSION_KEYS,
+  cashier: ["pos", "orders", "inventory", "attendance"],
+};
+
+/** Expand legacy module-only grants so the UI and employee summaries show
+ * the effective capabilities represented by older saved rows. */
+export function expandPermissionGrants(grants: PermissionKey[]): PermissionKey[] {
+  return ALL_PERMISSION_KEYS.filter((key) =>
+    grants.includes(key) || grants.includes(key.split(".")[0] as PermissionModuleKey)
+  );
+}
+
+export function countPermissionModules(user: Pick<StaffUser, "role" | "permissions">): number {
+  const grants = expandPermissionGrants(user.permissions ?? ROLE_DEFAULT_PERMISSIONS[user.role]);
+  return PERMISSION_MODULES.filter(({ key }) => grants.includes(`${key}.view` as PermissionKey)).length;
+}
+
+export function countPermissionActions(user: Pick<StaffUser, "role" | "permissions">): number {
+  return expandPermissionGrants(user.permissions ?? ROLE_DEFAULT_PERMISSIONS[user.role]).filter((key) => key.includes(".") && !key.endsWith(".view")).length;
+}
+
 export interface NavItem {
   href: string;
   icon: typeof PanelsTopLeft;
   key: "dashboard" | "pos" | "inventory" | "products" | "recipes" | "orders" | "finance" | "reports" | "employees" | "customers" | "settings" | "devices" | "attendance" | "hr";
   roles: UserRole[];
   /** Granular permission gate (any-of — Finance needs either "finance" or
-   * "purchases", everything else has exactly one entry). Absent for
-   * Recipes/Devices, which stay hard role-gated (owner-only, no permission
-   * can unlock them for a cashier) — see PermissionKey's doc comment. */
+   * "purchases", everything else has exactly one entry). HR remains
+   * owner-only because its records use a separate owner-PIN session. */
   permissions?: PermissionKey[];
 }
 
@@ -32,8 +94,8 @@ export interface NavItem {
 // `roles` is now a coarse allow-list (both roles listed for every
 // permission-gated item, since a cashier COULD be granted any of them) —
 // the real gate for those is `permissions` via hasPermission() below.
-// Recipes/Devices have no `permissions` entry, so they stay hard-locked to
-// owner regardless of any grant — unaffected by the permission system.
+// HR has no `permissions` entry, so it stays hard-locked to owner regardless
+// of an employee's grants; its API still requires a separate owner PIN.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", icon: PanelsTopLeft, key: "dashboard", roles: ["owner", "cashier"], permissions: ["dashboard"] },
   { href: "/pos", icon: ScanLine, key: "pos", roles: ["owner", "cashier"], permissions: ["pos"] },
@@ -41,7 +103,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/inventory", icon: Boxes, key: "inventory", roles: ["owner", "cashier"], permissions: ["inventory"] },
   { href: "/attendance", icon: CalendarCheck, key: "attendance", roles: ["owner", "cashier"], permissions: ["attendance"] },
   { href: "/products", icon: Tags, key: "products", roles: ["owner", "cashier"], permissions: ["products"] },
-  { href: "/recipes", icon: BookOpenCheck, key: "recipes", roles: ["owner"] },
+  { href: "/recipes", icon: BookOpenCheck, key: "recipes", roles: ["owner", "cashier"], permissions: ["recipes"] },
   { href: "/finance", icon: WalletCards, key: "finance", roles: ["owner", "cashier"], permissions: ["finance", "purchases"] },
   { href: "/reports", icon: ChartNoAxesCombined, key: "reports", roles: ["owner", "cashier"], permissions: ["reports"] },
   { href: "/employees", icon: UsersRound, key: "employees", roles: ["owner", "cashier"], permissions: ["employees"] },
@@ -50,42 +112,20 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/settings", icon: Settings2, key: "settings", roles: ["owner", "cashier"], permissions: ["settings"] },
 ];
 
-// Backward-compat fallback for any staff row whose `permissions` is still
-// null (i.e. never configured through the new UI) — deliberately identical
-// to what each role could already reach via the old hardcoded `roles`
-// arrays, so no existing user's access changes until an owner explicitly
-// sets permissions for them.
-export const ROLE_DEFAULT_PERMISSIONS: Record<UserRole, PermissionKey[]> = {
-  owner: ["dashboard", "pos", "orders", "inventory", "products", "finance", "purchases", "reports", "employees", "settings"],
-  cashier: ["pos", "orders", "inventory", "attendance"],
-};
-
-export const ALL_PERMISSION_KEYS: PermissionKey[] = [
-  "pos",
-  "orders",
-  "inventory",
-  "purchases",
-  "products",
-  "finance",
-  "reports",
-  "attendance",
-  "employees",
-  "customers",
-  "settings",
-  "dashboard",
-];
-
-/** The one place "does this user have X" is decided. Owner always true. */
+/** The one place module and action grants are evaluated. A legacy module
+ * grant still grants that module's actions until the row is explicitly saved
+ * from the new matrix. */
 export function hasPermission(user: Pick<StaffUser, "role" | "permissions"> | null | undefined, key: PermissionKey): boolean {
   if (!user) return false;
   if (user.role === "owner") return true;
   const perms = user.permissions ?? ROLE_DEFAULT_PERMISSIONS[user.role];
-  return perms.includes(key);
+  if (perms.includes(key)) return true;
+  if (!key.includes(".")) return perms.includes(`${key}.view` as PermissionKey);
+  return perms.includes(key.split(".")[0] as PermissionModuleKey);
 }
 
 export function canAccess(user: Pick<StaffUser, "role" | "permissions">, pathname: string): boolean {
-  // Device tools now live under Settings. Keep the old route available to
-  // owners for bookmarks, without advertising it as a separate module.
+  // Device activation remains restricted to the account owner.
   if (pathname === "/devices") return user.role === "owner";
   const item = NAV_ITEMS.find((i) => i.href === pathname);
   if (!item) return true; // not a gated route (e.g. login, branch-select)
@@ -94,12 +134,7 @@ export function canAccess(user: Pick<StaffUser, "role" | "permissions">, pathnam
   return true;
 }
 
-// Priority order for picking a landing page once a user's own permissions
-// are known — first one they actually have access to wins. Owner always
-// lands on Dashboard (always has every permission, so this never needs to
-// fall through). Cashier used to always land on /pos; that's now just the
-// first (and usually only) candidate that matches, so existing cashiers see
-// no change.
+// Priority order for picking the first page this employee is allowed to use.
 const LANDING_PRIORITY: (typeof NAV_ITEMS)[number]["key"][] = [
   "pos",
   "orders",
@@ -112,6 +147,8 @@ const LANDING_PRIORITY: (typeof NAV_ITEMS)[number]["key"][] = [
   "employees",
   "customers",
   "settings",
+  "recipes",
+  "hr",
 ];
 
 /** Returns the first route this user can actually reach, or null if they

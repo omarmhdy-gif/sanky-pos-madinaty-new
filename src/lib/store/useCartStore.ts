@@ -1,6 +1,16 @@
 import { create } from "zustand";
 import type { CartLine, CartLineModifier, OrderType } from "@/lib/types";
 import { genId } from "@/lib/utils";
+import { useAuthStore } from "@/lib/store/useAuthStore";
+import { hasPermission } from "@/lib/permissions";
+import { toast } from "@/components/ui/toast";
+
+function canUseCartAction(permission: "pos.apply_discount" | "pos.change_price"): boolean {
+  if (hasPermission(useAuthStore.getState().currentUser, permission)) return true;
+  const isArabic = typeof document !== "undefined" && document.documentElement.lang.startsWith("ar");
+  toast(isArabic ? "ليس لديك صلاحية لتنفيذ هذا الإجراء." : "You do not have permission to perform this action.", "error");
+  return false;
+}
 
 interface CartStore {
   lines: CartLine[];
@@ -121,17 +131,25 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   setTableNumber: (v) => set({ tableNumber: v }),
   setCustomerName: (v) => set({ customerName: v }),
   setCustomerId: (v) => set({ customerId: v }),
-  setDiscountPercent: (v) => set({ discountPercent: Math.max(0, Math.min(100, v)), discountFixedAmount: 0, promoCode: undefined }),
-  setDiscountFixedAmount: (v) => set({ discountFixedAmount: Math.max(0, v), discountPercent: 0, promoCode: undefined }),
-  applyPromoCode: (code, percent) => set({ promoCode: code, discountPercent: Math.max(0, Math.min(100, percent)), discountFixedAmount: 0 }),
+  setDiscountPercent: (v) => {
+    if (canUseCartAction("pos.apply_discount")) set({ discountPercent: Math.max(0, Math.min(100, v)), discountFixedAmount: 0, promoCode: undefined });
+  },
+  setDiscountFixedAmount: (v) => {
+    if (canUseCartAction("pos.apply_discount")) set({ discountFixedAmount: Math.max(0, v), discountPercent: 0, promoCode: undefined });
+  },
+  applyPromoCode: (code, percent) => {
+    if (canUseCartAction("pos.apply_discount")) set({ promoCode: code, discountPercent: Math.max(0, Math.min(100, percent)), discountFixedAmount: 0 });
+  },
 
-  applySecondaryPricing: (getSecondaryPrice) =>
+  applySecondaryPricing: (getSecondaryPrice) => {
+    if (!canUseCartAction("pos.change_price")) return;
     set((state) => ({
       lines: state.lines.map((l) => {
         const secondary = getSecondaryPrice(l.productId);
         return secondary !== undefined ? { ...l, unitPrice: secondary } : l;
       }),
-    })),
+    }));
+  },
 
   subtotal: () => get().lines.reduce((sum, l) => sum + lineTotal(l), 0),
 }));

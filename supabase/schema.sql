@@ -163,6 +163,7 @@ create table orders (
   total numeric not null,
   payment jsonb not null,
   status text not null,
+  void_reason text,
   type text not null,
   table_number text,
   customer_name text,
@@ -1282,3 +1283,24 @@ end;
 $function$;
 
 grant execute on function public.create_order(jsonb, jsonb) to anon, authenticated;
+
+-- A paid order is refunded, not cancelled. Draft cancellations happen in the
+-- POS cart before an order row is created, so persisted paid orders must never
+-- transition to `voided`.
+create or replace function public.prevent_voiding_paid_orders()
+returns trigger
+language plpgsql
+set search_path = public
+as $function$
+begin
+  if old.status in ('completed', 'refunded') and new.status = 'voided' then
+    raise exception 'Paid orders cannot be cancelled; use a refund instead.'
+      using errcode = '22023';
+  end if;
+  return new;
+end;
+$function$;
+
+create trigger orders_prevent_paid_void
+  before update of status on public.orders
+  for each row execute function public.prevent_voiding_paid_orders();

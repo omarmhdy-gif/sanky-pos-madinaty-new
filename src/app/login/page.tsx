@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Delete, Moon, Sun, Languages, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useBranchStore } from "@/lib/store/useBranchStore";
-import { authenticateShopOwner, authenticateStaffPin, verifyShopAccount } from "@/lib/supabase/api";
+import { authenticateConsoleEmployee, authenticateShopOwner, authenticateStaffPin } from "@/lib/supabase/api";
 import { clearShopAccountNumber, getShopAccountNumber, setShopAccountNumber, supabase } from "@/lib/supabase/client";
 import { canAccess, defaultRouteFor } from "@/lib/permissions";
 import { RETURN_PATH_KEY } from "@/components/auth/AuthGuard";
@@ -187,11 +187,6 @@ export default function LoginPage() {
         throw new Error(ar ? "رقم الحساب لازم يكون 4 أرقام" : "Account number must be 4 digits");
       }
       if (webMode === "forgot") {
-        const matches = await verifyShopAccount(accountNumber, cleanEmail);
-        if (!matches) throw new Error(ar ? "بيانات الحساب غير صحيحة" : "Account details are incorrect");
-      }
-
-      if (webMode === "forgot") {
         const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: `${window.location.origin}/reset-password/`,
         });
@@ -202,11 +197,12 @@ export default function LoginPage() {
 
       const { error: signInError } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (signInError) throw signInError;
-      const user = await authenticateShopOwner(accountNumber);
-      if (!user || !user.isActive || user.role !== "owner") {
+      const owner = await authenticateShopOwner(accountNumber);
+      const user = owner ?? await authenticateConsoleEmployee(accountNumber);
+      if (!user || !user.isActive) {
         await supabase.auth.signOut();
         clearShopAccountNumber();
-        throw new Error(ar ? "رقم الحساب أو البريد غير مرتبط بحساب مالك نشط" : "This email is not linked to an active owner for that account");
+        throw new Error(ar ? "رقم الحساب أو بيانات الموظف غير صحيحة أو الحساب غير نشط" : "The account number or employee credentials are incorrect, or the account is inactive");
       }
       setShopAccountNumber(accountNumber);
       setBranch(user.branchId);
